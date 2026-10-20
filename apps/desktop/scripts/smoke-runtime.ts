@@ -10,7 +10,6 @@ import { fileURLToPath } from 'node:url'
 import { readPrimaryRuntime, workspaceDependencyPaths } from '../../../packages/skill/tool-workspace-dependencies/src/index.ts'
 import { DesktopHostProcess } from '../src/host-process.ts'
 import { createPluginProfile } from '../src/project-manager.ts'
-import { readDesktopProductBundles } from '../src/product.ts'
 import type { DesktopRuntimeDescriptor } from '../src/runtime-tree.ts'
 
 /**
@@ -20,10 +19,12 @@ import type { DesktopRuntimeDescriptor } from '../src/runtime-tree.ts'
  * @param runtime - Verified resource descriptor.
  * @param environment - Credential-scrubbed build environment and private native cache.
  * @param resourcesRuntime - Bundled interpreters outside the application archive.
+ * @param productBundles - Product defaults read from the verified runtime or archive.
  * @returns Resolves after checks and teardown; rejects on a check or teardown failure.
  */
 export async function smokeDesktopRuntime(
   root: string, node: string, runtime: DesktopRuntimeDescriptor, environment: NodeJS.ProcessEnv, resourcesRuntime: string,
+  productBundles: readonly string[],
 ): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), 'dsh-desktop-smoke-'))
   const profile = join(home, 'profiles', 'desktop')
@@ -41,7 +42,7 @@ export async function smokeDesktopRuntime(
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     writeFileSync(join(home, 'npmrc'), '')
-    createPluginProfile(profile, readDesktopProductBundles(root, runtime))
+    createPluginProfile(profile, productBundles)
     const pluginName = 'desktop-runtime-smoke-plugin'
     const plugin = join(home, pluginName)
     mkdirSync(plugin, { recursive: true })

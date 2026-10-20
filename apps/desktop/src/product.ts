@@ -77,6 +77,16 @@ export function readDesktopProductBundles(root: string, runtime?: DesktopRuntime
     if ((error as NodeJS.ErrnoException).code === 'ENOENT' && !runtime?.files.some(file => file.path === DESKTOP_PRODUCT_FILE)) return []
     throw error
   }
+  return parseDesktopProductBundles(text, runtime)
+}
+
+/**
+ * Validate product defaults read from a directory or application archive.
+ * @param text - Product metadata JSON.
+ * @param runtime - Installed inventory used to reject unavailable product packages.
+ * @returns Ordered product bundles; rejects malformed or inconsistent metadata.
+ */
+export function parseDesktopProductBundles(text: string, runtime?: DesktopRuntimeDescriptor): readonly string[] {
   const value: unknown = JSON.parse(text)
   if (!record(value) || value.schemaVersion !== 1) throw new Error('desktop product: invalid bundled profile defaults')
   const names = bundles(value.bundles)

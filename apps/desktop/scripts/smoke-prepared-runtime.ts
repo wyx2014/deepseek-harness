@@ -4,9 +4,11 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { readAsar } from 'app-builder-lib/out/asar/asar.js'
 import { runtimeArchivePath } from '../../desktop-host/src/office-engine.ts'
 import { desktopNodeEnvironment } from '../src/node-environment.ts'
 import type { DesktopRuntimeDescriptor } from '../src/runtime-tree.ts'
+import { DESKTOP_PRODUCT_FILE, parseDesktopProductBundles, readDesktopProductBundles } from '../src/product.ts'
 import { scrubWindowsSigningEnvironment } from './windows-sign.mjs'
 import { smokeDesktopRuntime } from './smoke-runtime.ts'
 import { verifyRuntimeArchive } from './verify-runtime-archive.ts'
@@ -27,7 +29,16 @@ export async function smokePreparedRuntime(
     NARB_NATIVE_CACHE_DIR: cache, NARB_DISABLE_NATIVE_CACHE: '0' }
   try {
     const archive = runtimeArchivePath(root)
-    if (archive !== undefined) await verifyRuntimeArchive(archive, descriptor)
+    let productBundles: readonly string[] = []
+    if (archive === undefined) {
+      productBundles = readDesktopProductBundles(root, descriptor)
+    } else {
+      await verifyRuntimeArchive(archive, descriptor)
+      if (descriptor.files.some(file => file.path === DESKTOP_PRODUCT_FILE)) {
+        const contents = await (await readAsar(archive)).readFile(join('dsh', DESKTOP_PRODUCT_FILE))
+        productBundles = parseDesktopProductBundles(contents.toString('utf8'), descriptor)
+      }
+    }
     const { stdout } = await promisify(execFile)(node, [
       '--expose-internals', resolve(import.meta.dirname, '../tests/fixtures/runtime-payload-smoke.mjs'), root, resourcesRuntime,
     ], { timeout: 120_000, windowsHide: true,
@@ -42,7 +53,7 @@ export async function smokePreparedRuntime(
       throw error
     })
     process.stdout.write(stdout)
-    await smokeDesktopRuntime(root, node, descriptor, environment, resourcesRuntime)
+    await smokeDesktopRuntime(root, node, descriptor, environment, resourcesRuntime, productBundles)
   } finally {
     await rm(cache, { recursive: true, force: true })
   }
