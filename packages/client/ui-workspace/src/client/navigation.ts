@@ -44,9 +44,9 @@ export interface UiWorkspace {
   /**
    * Contribute one live sidebar group for the calling plugin's lifetime.
    * @param source - stable observable with localized label and Session membership.
-   * @returns disposer removing the group and its subscription.
+   * @returns awaitable disposer removing the group and its subscription.
    */
-  registerSessionGroup(source: WorkspaceSessionGroupSource): () => void
+  registerSessionGroup(source: WorkspaceSessionGroupSource): () => Promise<void>
   /**
    * Select a Session and show its Conversation as one UI navigation action.
    * @param target - known Session identity or durable direct-parent subagent address to display.
@@ -155,7 +155,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   readonly sessionGroups = createSnapshotStore<readonly WorkspaceSessionGroup[]>([])
   private readonly groupSources = new Map<WorkspaceSessionGroupSource, WorkspaceSessionGroup>()
 
-  registerSessionGroup(source: WorkspaceSessionGroupSource): () => void {
+  registerSessionGroup(source: WorkspaceSessionGroupSource): () => Promise<void> {
     return this.ctx.effect(() => {
       const publish = (): void => {
         this.groupSources.set(source, source.getSnapshot())

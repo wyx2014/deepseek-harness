@@ -31,7 +31,7 @@ Use the sidebar to browse Workspaces and their Sessions, reorder them, and start
 
 History rows without a stored title use the localized unnamed label (未命名 / Untitled), rather than a directory name. The current blank row remains New Session; other blank rows remain hidden. Rename drafts use the stored title, or start empty when unnamed; unnamed rows do not offer title copying.
 
-Client plugins can register a live virtual Session group through `uiWorkspace.registerSessionGroup(source)`. The source supplies a stable key, localized label, optional clock icon, and Session ids; real Workspace membership takes precedence. Virtual groups appear before Ungrouped and support expansion, Session navigation, pinning, archiving, and browser-local ordering. Registration disposal removes the group and its subscription without changing Sessions or Workspace membership.
+Client plugins can register a live virtual Session group through `uiWorkspace.registerSessionGroup(source)`. The source supplies a stable key, localized label, optional clock icon, and Session ids; real Workspace membership takes precedence. Virtual groups appear before Ungrouped and support expansion, Session navigation, pinning, archiving, and browser-local ordering. Awaiting the returned disposer removes the group and its subscription without changing Sessions or Workspace membership.
 
 ### Reordering and view options
 

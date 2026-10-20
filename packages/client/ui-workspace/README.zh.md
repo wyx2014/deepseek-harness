@@ -31,7 +31,7 @@ kind: "package-reference"
 
 未保存标题的历史会话显示本地化名称「未命名 / Untitled」，不使用目录名兜底。当前空会话仍显示「新会话」，其他空会话仍隐藏。重命名草稿使用已保存标题，无标题时留空；无标题行不提供标题复制。
 
-Client 插件可通过 `uiWorkspace.registerSessionGroup(source)` 注册实时的虚拟 Session 分组。数据源提供稳定的 key、本地化标题、可选时钟图标和 Session id；真实 Workspace 归属优先。虚拟分组显示在 Ungrouped 之前，支持展开、会话导航、置顶、归档和浏览器本地排序。注销会移除分组及其订阅，不修改 Session 或 Workspace 归属。
+Client 插件可通过 `uiWorkspace.registerSessionGroup(source)` 注册实时的虚拟 Session 分组。数据源提供稳定的 key、本地化标题、可选时钟图标和 Session id；真实 Workspace 归属优先。虚拟分组显示在 Ungrouped 之前，支持展开、会话导航、置顶、归档和浏览器本地排序。等待返回的释放函数完成会移除分组及其订阅，不修改 Session 或 Workspace 归属。
 
 ### 重排序与视图选项
 

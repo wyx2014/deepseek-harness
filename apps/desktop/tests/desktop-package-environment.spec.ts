@@ -14,9 +14,9 @@ it('standalone Windows settings discard ambient update and signing configuration
   const environment = standaloneWindowsPackageEnvironment({ PATH: '/tools', ...POLICY,
     DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'test-secret', DOWNLOAD_PROD_COS_SECRET_KEY: 'test-secret' })
   expect(environment).toEqual({ PATH: '/tools', DSH_DESKTOP_APP_ID: 'com.deepseek.harness', DSH_DESKTOP_UNSIGNED: '1', DSH_DESKTOP_STANDALONE: '1' })
-  expect(() => validateDesktopPackageEnvironment(environment, { platform: 'win32', arch: 'x64' }, { unsigned: true, standalone: true })).not.toThrow()
-  expect(() => validateDesktopPackageEnvironment(environment, { platform: 'win32', arch: 'x64' }, { unsigned: true })).toThrow(/explicitly/u)
-  expect(() => validateDesktopPackageEnvironment(environment, { platform: 'win32', arch: 'x64' }, { standalone: true })).toThrow(/unsigned Windows/u)
+  expect(() => { validateDesktopPackageEnvironment(environment, WINDOWS, { unsigned: true, standalone: true }) }).not.toThrow()
+  expect(() => { validateDesktopPackageEnvironment(environment, WINDOWS, { unsigned: true }) }).toThrow(/explicitly/u)
+  expect(() => { validateDesktopPackageEnvironment(environment, WINDOWS, { standalone: true }) }).toThrow(/unsigned Windows/u)
 })
 const RELEASE = { ...POLICY, DSH_DESKTOP_APP_ID: 'com.example.desktop', DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com',
   DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef' }
