@@ -91,4 +91,18 @@ describe('desktop package-set selection', () => {
     }).toThrow(/lib\/index\.js/u)
     expect(() => { assertDesktopHostPackageFiles(files.slice(0, 1)) }).toThrow(/lib\/cli\.js/u)
   })
+
+  it('includes product bundles and their local dependencies and rejects missing product tarballs', () => {
+    const available = new Map<string, PackedDesktopPackage>([
+      ['@deepseek-ai/dsh', packed('@deepseek-ai/dsh')],
+      ['@deepseek-ai/dsh-desktop-host', packed('@deepseek-ai/dsh-desktop-host')],
+      ['@example/product', packed('@example/product', { peerDependencies: { '@deepseek-ai/dsh-base': '*' } })],
+      ['@deepseek-ai/dsh-base', packed('@deepseek-ai/dsh-base')],
+    ])
+    expect(selectDesktopPackageClosure(available, ['@example/product']).map(pkg => pkg.manifest.name)).toContain('@deepseek-ai/dsh-base')
+    expect(selectDesktopPackageClosure(available, ['@example/product']).map(pkg => pkg.manifest.name)).toContain('@example/product')
+    expect(() => selectDesktopPackageClosure(available, ['@example/missing'])).toThrow(/omit @example\/missing/u)
+    available.delete('@deepseek-ai/dsh-base')
+    expect(() => selectDesktopPackageClosure(available, ['@example/product'])).toThrow(/unpacked package/u)
+  })
 })

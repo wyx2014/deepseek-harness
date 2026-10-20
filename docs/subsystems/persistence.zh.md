@@ -326,6 +326,18 @@ interface SessionPersistenceSnapshot {
 
 ## 后端
 
+`delete(id, { expectedRevision })` 在消费方授权并从 `stat().revision` 开始检查后移除非活跃 Session。提供方排除写者/恢复操作并比较修订号，提交持久化缺失后等待 `session-persistence/deleted` 成员关联清理。缺失幂等；失败时操作仍可重试。JSONL 支持删除，在移除所有日志代际前封存身份；没有实现的提供方以 `SessionDeletionUnsupportedError` 明确拒绝。调用方及失败规则见[持久化包](../../packages/session/session-persistence/README.zh.md)。
+
+```ts type-equiv
+/** Options for deleting exactly the stored Session revision inspected by a caller. */
+interface SessionPersistenceDeleteOptions {
+  /** Revision captured before inspecting the log; undefined authorizes only an already absent Session. */
+  readonly expectedRevision: SessionPersistenceRevision | undefined
+  /** Cancellation before deletion commits; committed deletion and projection cleanup are uncancellable. */
+  readonly signal?: AbortSignal
+}
+```
+
 随产品交付的 provider 实现抽象 `SessionPersistence` 约定（`create`/`open`/`stat`/`list`，逐会话 `SessionHandle` 承载 `read`/`append`/`flush`/`close`，全程可选支持取消），并通过共享的持久化契约套件：
 
 - **[dsh-session-persistence-jsonl](../../packages/session/session-persistence-jsonl)**——逐会话仅追加的逻辑 JSONL 日志，默认存储为带 checksum 的连续 Zstandard frame，也可配置为原始行；具备崩溃安全的原子实体化、逐批 `fsync` 的 append，以及在第一次新 append 之前截断撕裂尾部。`stat`/`list` 携带 `sizeBytes` 与尽力而为的、由 `fs.stat` 派生的修订号。
@@ -396,8 +408,8 @@ abstract flush(): Promise<void>
  * against revisions from the same service instance and session id: equal
  * revisions may be treated as an unchanged log; unequal revisions promise
  * nothing. Write-ownership churn does not change a revision. It exists for
- * derived read-model caches keyed off `stat`/`list`; it plays no part in
- * open, read, or resume.
+ * derived read-model caches keyed off `stat`/`list` and guards an inspected
+ * deletion; it plays no part in open, read, or resume.
  * @param id - the stored session to observe.
  * @param options - optional cancellation.
  * @returns the snapshot, or `undefined` when the session does not exist.
@@ -410,6 +422,44 @@ abstract stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<S
  * @returns one snapshot per stored session.
  */
 abstract list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]>
+
+/**
+ * Delete an inspected stored Session and await derived membership cleanup.
+ * Providers must exclude active writers/resumes, compare the inspected revision under write ownership,
+ * and prevent historical generations from reappearing after interruption. Never dispose an active owner.
+ * The default explicitly refuses unsupported providers. JSONL implements this operation.
+ * @param id - the Session to delete; authorization belongs to the consumer.
+ * @param options - the revision inspected before deletion and optional pre-commit cancellation.
+ * @returns true when deletion committed, false for an already absent Session after cleanup.
+ * @throws {SessionAlreadyOwnedError} while a writer or live Session owns the identity.
+ * @throws {SessionPersistenceChangedError} when a fresh inspection is required.
+ * @throws {SessionDeletionUnsupportedError} on providers without deletion support.
+ */
+delete(id: SessionId, options: SessionPersistenceDeleteOptions): Promise<boolean>
+```
+
+Types: [SessionId](core.zh.md)
+
+Source: [`packages/session/session-persistence/src/index.ts`](../../packages/session/session-persistence/src/index.ts)
+
+<a id="session-persistence-events"></a>
+
+### `session-persistence/*` events
+
+<a id="session-persistencedeleted--parallel"></a>
+
+#### `session-persistence/deleted` — parallel
+
+Awaited removal of derived membership after durable deletion. Also emitted on an absent retry. A failure rejects deletion; callers retain their record and retry to finish cleanup.
+
+```ts cordis-catalog
+/**
+ * Awaited removal of derived membership after durable deletion. Also emitted on an absent retry.
+ * A failure rejects deletion; callers retain their record and retry to finish cleanup.
+ * @mode parallel
+ * @param id - the deleted or already absent Session identity.
+ */
+'session-persistence/deleted'(id: SessionId): void | Promise<void>
 ```
 
 Types: [SessionId](core.zh.md)

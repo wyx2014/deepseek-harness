@@ -44,6 +44,8 @@ MCP 服务器需要主动配置。在目标 Cordis 作用域中，为每台服�
 
 配置的 `serverName` 在注册作用域内标识服务器。同一作用域中的两个条目不能占用相同名称；不同 Agent 作用域可以复用该名称。公开工具名包含配置的服务器名称，因此不同服务器的同名工具仍可区分。注册副作用拥有名称和已发现工具；插件释放时关闭连接并移除其贡献。
 
+作用域内的 `mcp/connection-status` 事件通过 `McpConnectionStatus` 报告不含凭据的状态：`serverName`、`state`（`connecting`、`connected`、`reconnecting`、`disconnected` 或 `error`）、连接 `generation`、已注册的 `toolCount`，以及 Unix 毫秒时间 `observedAt`。消费者可以显示连接进度与工具可用性，无需暴露传输配置。
+
 [原生 Cua Driver 提供方](../../packages/experimental/computer-use-cua-driver-native/README.zh.md) 复用客户端导出的结果适配器，无需打开 MCP 连接。桌面提供方选择属于[计算机使用子系统](computer-use.zh.md)。
 
 -----
@@ -136,4 +138,25 @@ register(server: string, provider: McpResourceProvider): () => void
 ```
 
 Source: [`packages/mcp/mcp-resources/src/index.ts`](../../packages/mcp/mcp-resources/src/index.ts)
+
+<a id="mcp-events"></a>
+
+### `mcp/*` events
+
+<a id="mcpconnection-status--parallel"></a>
+
+#### `mcp/connection-status` — parallel
+
+A server connection changed state or its registered tool count changed.
+
+```ts cordis-catalog
+/**
+ * A server connection changed state or its registered tool count changed.
+ * @mode parallel
+ * @param status Credential-free observation of the current connection generation.
+ */
+'mcp/connection-status'(status: McpConnectionStatus): void
+```
+
+Source: [`packages/mcp/mcp-client/src/connection.ts`](../../packages/mcp/mcp-client/src/connection.ts)
 <!-- END GENERATED cordis-surface -->

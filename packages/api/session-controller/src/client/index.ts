@@ -9,6 +9,7 @@ import { createSessionControlStream } from './transport.ts'
 import { ClientSessions } from './sessions/service.ts'
 import type { SessionRemotes } from './sessions/remotes.ts'
 import type {} from '../remote-events.ts'
+export type { ClientPromptAdmission } from './contract/prompt-admission.ts'
 
 export {
   createSessionControlStream,

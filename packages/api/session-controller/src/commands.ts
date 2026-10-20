@@ -306,9 +306,10 @@ export class SessionCommandController {
   /**
    * Reject empty content, then admit one prompt after Agent and attachment validation.
    * @param request - Session identity, prompt content, source metadata, and delivery mode.
+   * @param beforeDelivery - optional Host admission after native validation, before inbox delivery.
    * @returns acknowledgement that the Agent accepted the prompt.
    */
-  async prompt(request: SessionPromptRequest): Promise<SessionPromptValue> {
+  async prompt(request: SessionPromptRequest, beforeDelivery?: (agent: Agent) => Promise<void>): Promise<SessionPromptValue> {
     if (!hasPromptContent(request.content)) {
       throw new RemoteError(
         'gateway/bad-request',
@@ -359,6 +360,12 @@ export class SessionCommandController {
             `session "${agent.id}" was disposed during prompt admission`,
             { sessionId: agent.id },
           )
+        }
+        // Host admission runs after native validation, before any inbox delivery.
+        // A rejection leaves uploaded receipts available for the same request's retry.
+        await beforeDelivery?.(agent)
+        if (this.ctx.agents.get(agent.id) !== agent) {
+          throw new RemoteError('session/not-found', 'session disposed during Host admission', { sessionId: agent.id })
         }
         using binding = this.ctx.fileUploads.bindPrompt(agent, admission.receiptIds, request.requestId)
         if (request.mode === 'steer') agent.steer(message)
@@ -607,9 +614,9 @@ function hasPromptRequest(agent: Agent, requestId: SessionRequestId): boolean {
   if (agent.inbox.nextTurn.some(matches) || agent.inbox.nextStep.some(matches)) return true
   // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
   return agent.session.snapshotEvents().some((event) => {
-    if (event.type !== 'user/message') return false
-    const source = event.data.source
-    return source.kind === 'user' && 'rpcId' in source && source.rpcId === requestId
+    if (event.type === 'user/message') return matches(event.data)
+    // A pre-step may own a claimed message before the model-visible append.
+    return event.type === 'agent/inbox/spliced' && event.data.inserted.some(matches)
   })
 }
 function imageBlockIn(

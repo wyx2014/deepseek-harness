@@ -24,6 +24,27 @@ import { createTransport } from './transport.ts'
 import { syncTools } from './tools.ts'
 import type { ToolBridgeOptions, ToolDisposers } from './tools.ts'
 import type { Config } from './index.ts'
+import { sanitizeMcpError } from './redact.ts'
+import { scopeOf, scopeTarget } from '@deepseek-ai/dsh-scope'
+
+/** Value-only connection observation; never contains transport or credential values. */
+export interface McpConnectionStatus {
+  serverName: string
+  state: 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
+  generation: number
+  toolCount: number
+  observedAt: number
+}
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * A server connection changed state or its registered tool count changed.
+     * @mode parallel
+     * @param status Credential-free observation of the current connection generation.
+     */
+    'mcp/connection-status'(status: McpConnectionStatus): void
+  }
+}
 
 /** Automatic reconnect policy for one MCP server connection. */
 export interface ReconnectConfig {
@@ -131,6 +152,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     registrationFailure: 'contain',
     serverName: config.serverName,
     toolCallTimeoutMs: config.toolCallTimeoutMs,
+    redactError: error => sanitizeMcpError(error, config, false),
   }
   // The initial sync uses 'throw' when failOnStartupError is configured, so
   // a registration conflict propagates to the startup-await path. Re-syncs
@@ -155,6 +177,13 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   let connectedAt: number | undefined
   /** The real error from the first connection attempt, for startup-await diagnostics. */
   let firstAttemptError: unknown
+  let generationNumber = 0
+  let state: McpConnectionStatus['state'] = 'connecting'
+  function publish(next: McpConnectionStatus['state']): void {
+    state = next
+    void ctx.parallel(scopeTarget(ctx, scopeOf(ctx)), 'mcp/connection-status', { serverName: config.serverName, state, generation: generationNumber, toolCount: disposers.size, observedAt: Date.now() })
+      .catch(() => { ctx.logger.warn(`${label}: connection status observer failed`) })
+  }
 
   /** A generation may act only while it is the current one on a live plugin. */
   const isCurrent = (generation: Client): boolean => !disposed && client === generation
@@ -170,6 +199,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     const run = syncChain.then(async () => {
       if (!isCurrent(generation)) return
       disposers = await syncTools(generation, ctx, syncOpts, disposers)
+      if (state === 'connected') publish('connected')
     })
     // The chain tail must survive a failed sync; the enqueuing caller owns reporting.
     syncChain = run.catch(() => {})
@@ -190,6 +220,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     if (!quiesced) {
       client = undefined
       closeClient = undefined
+      publish('error')
       ctx.logger.error(`${label}: failed generation could not confirm transport closure — reconnect stopped to avoid overlapping server processes; reload the plugin or restart the Host to retry`)
       return
     }
@@ -211,6 +242,8 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   function scheduleReconnect(): void {
     const lostEstablishedConnection = connectedAt !== undefined
     if (!policy.enabled) {
+      serverInstructions = ''
+      publish('error')
       const message = lostEstablishedConnection
         ? 'connection lost and reconnect is disabled — registered tools will fail until an HMR reload or Host restart'
         : 'connection failed and reconnect is disabled — no tools were registered; reload the plugin or restart the Host to connect'
@@ -229,11 +262,14 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         for (const dispose of disposers.values()) dispose()
         disposers = new Map()
         serverInstructions = ''
+        publish('error')
       })
       ctx.logger.error(`${label}: giving up after ${policy.maxAttempts} consecutive failed reconnect attempts — tools unregistered; reload the plugin or restart the Host to reconnect`)
       return
     }
     const delayMs = Math.min(policy.maxDelayMs, policy.initialDelayMs * 2 ** (failedAttempts - 1))
+    serverInstructions = ''
+    publish('reconnecting')
     const action = lostEstablishedConnection ? 'connection lost; reconnecting' : 'connection failed; retrying'
     ctx.logger.warn(`${label}: ${action} in ${delayMs}ms (attempt ${failedAttempts}/${policy.maxAttempts})`)
     reconnectTimer = setTimeout(() => {
@@ -255,6 +291,8 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
    * @param startup - Whether this is the plugin's activation attempt.
    */
   async function connectGeneration(startup: boolean): Promise<void> {
+    generationNumber++
+    publish(startup ? 'connecting' : 'reconnecting')
     const generation = new Client(
       { name: 'dsh-mcp-client', version: '0.0.1' },
       {
@@ -299,7 +337,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       try {
         await enqueueSync(generation)
       } catch (error) {
-        if (!disposed) ctx.logger.error(`${label}: tool re-sync failed: ${String(error)}`)
+        if (!disposed) ctx.logger.error(`${label}: tool re-sync failed: ${sanitizeMcpError(error, config)}`)
       }
     }
     let instructions: string
@@ -325,7 +363,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       if (firstAttemptError === undefined) firstAttemptError = error
       // Disposal clears current ownership before it closes the generation, so
       // only a live supervisor reports an attempt failure.
-      if (isCurrent(generation)) ctx.logger.warn(`${label}: connection attempt failed: ${String(error)}`)
+      if (isCurrent(generation)) ctx.logger.warn(`${label}: connection attempt failed: ${sanitizeMcpError(error, config)}`)
       const quiesced = await closeGeneration()
       attemptSettled = true
       settleFailedGeneration(generation, quiesced)
@@ -339,6 +377,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     if (!isCurrent(generation)) return
     serverInstructions = instructions
     connectedAt = Date.now()
+    publish('connected')
     if (failedAttempts > 0) ctx.logger.info(`${label}: reconnected and re-synced tools (attempt ${failedAttempts}/${policy.maxAttempts})`)
   }
 
@@ -357,7 +396,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     // to undefined before this continuation runs.
     if (client !== undefined) return {}
     /* v8 ignore next -- defensive: firstAttemptError is always set when connect/sync fails */
-    return { error: firstAttemptError ?? new Error(`${label}: initial connection failed`) }
+    return { error: new Error(sanitizeMcpError(firstAttemptError ?? new Error(`${label}: initial connection failed`), config, false)) }
   })
 
   return {
@@ -368,20 +407,24 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         const generation = client
         if (!generation || connectedAt === undefined) throw new Error(`${label}: server is disconnected`)
         const options = { signal: exec.signal, timeout: config.toolCallTimeoutMs }
-        switch (request.method) {
-          case 'resources/list':
-            return await generation.listResources(
-              request.cursor === undefined ? undefined : { cursor: request.cursor }, options,
-            ) as JsonValue
-          case 'resources/templates/list':
-            return await generation.listResourceTemplates(
-              request.cursor === undefined ? undefined : { cursor: request.cursor }, options,
-            ) as JsonValue
-          case 'resources/read':
-            return await generation.readResource({ uri: request.uri }, options) as JsonValue
-          /* v8 ignore next 2 -- resource requests are the closed, typed tool operation union */
-          default:
-            return assertNever(request)
+        try {
+          switch (request.method) {
+            case 'resources/list':
+              return await generation.listResources(
+                request.cursor === undefined ? undefined : { cursor: request.cursor }, options,
+              ) as JsonValue
+            case 'resources/templates/list':
+              return await generation.listResourceTemplates(
+                request.cursor === undefined ? undefined : { cursor: request.cursor }, options,
+              ) as JsonValue
+            case 'resources/read':
+              return await generation.readResource({ uri: request.uri }, options) as JsonValue
+            /* v8 ignore next 2 -- resource requests are the closed, typed tool operation union */
+            default:
+              return assertNever(request)
+          }
+        } catch (error) {
+          throw new Error(sanitizeMcpError(error, config, false))
         }
       },
     },
@@ -404,6 +447,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       await syncChain
       for (const dispose of disposers.values()) dispose()
       disposers = new Map()
+      publish('disconnected')
     },
   }
 }

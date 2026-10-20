@@ -789,6 +789,54 @@ describe('UiWorkspaceService', () => {
   })
 
   describe('startSession draft initialization', () => {
+    it('prepares a fresh draft without reusing an existing blank Session when requested', async () => {
+      const backing = persistSelection({})
+      const b = bench({
+        workspaces: workspaceState([workspace('a', [sid('previous')])]),
+        sessions: sessionState([summary('previous', { blank: true, cwd: '/w/a' })], 'pending'),
+      })
+      b.uiWorkspace.openSession(sid('previous'))
+      b.sessions.list.set(sessionState([summary('previous', { blank: true, cwd: '/w/a' })]))
+      b.selectPanel.mockClear()
+      b.sessions.create.mockResolvedValueOnce(sid('fresh-draft'))
+      const onPrepared = vi.fn((id: SessionId) => {
+        expect(id).toBe(sid('fresh-draft'))
+        expect(b.requestDraftInitialization).toHaveBeenCalledOnce()
+        expect(b.sessions.retained[0]!.release).not.toHaveBeenCalled()
+        expect(JSON.parse(backing.get('dsh.sessions.current')!)).toEqual({ sessionId: sid('previous') })
+        expect(b.selectPanel).not.toHaveBeenCalled()
+      })
+      const options = { prompt: 'New team example', clearPreviousDraft: false, reuseBlank: false, onPrepared }
+
+      b.uiWorkspace.startSession(wid('a'), options)
+      await vi.waitFor(() => {
+        expect(JSON.parse(backing.get('dsh.sessions.current')!)).toEqual({ sessionId: sid('fresh-draft') })
+      })
+
+      expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('a') })
+      expect(b.requestDraftInitialization).toHaveBeenCalledExactlyOnceWith(
+        b.sessions.retained[1]!.reference.binding, options,
+      )
+      expect(b.sessions.binding).toHaveBeenCalledExactlyOnceWith(sid('fresh-draft'))
+      expect(onPrepared).toHaveBeenCalledOnce()
+      expect(b.sessions.retained[0]!.release).toHaveBeenCalledOnce()
+      expect(b.sessions.retained[1]!.release).not.toHaveBeenCalled()
+      expect(b.notify).not.toHaveBeenCalled()
+    })
+
+    it('prepares capability metadata after the draft and before navigation without submitting', async () => {
+      const b = bench({ workspaces: workspaceState([workspace('a')]) })
+      const opening = vi.spyOn(b.uiWorkspace, 'openWorkspace')
+      const onPrepared = vi.fn((id: SessionId) => {
+        expect(b.requestDraftInitialization).toHaveBeenCalledOnce()
+        expect(id).toBe(sid('capability-target'))
+        expect(b.selectPanel).not.toHaveBeenCalled()
+      })
+      b.sessions.create.mockResolvedValueOnce(sid('capability-target'))
+      b.uiWorkspace.startSession(wid('a'), { prompt: 'Team draft', onPrepared })
+      await lastOpening(opening)
+      expect(onPrepared).toHaveBeenCalledOnce()
+    })
     it.each<{ name: string; options: DraftInitializationOptions }>([
       { name: 'plain text', options: { prompt: '草稿 🧭\nsecond line', clearPreviousDraft: true } },
       { name: 'empty text', options: { prompt: '' } },

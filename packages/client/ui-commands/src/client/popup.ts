@@ -72,8 +72,8 @@ export interface PopupState {
   /**
    * Highlight index into the filtered row list: 0 until options land; afterwards
    * the row the loaded list marks as the current value
-   * ({@link SelectOption.active}), else 0. A search rebases it to the top of the
-   * filtered rows.
+   * ({@link SelectOption.active}), else the first enabled row. A search rebases it
+   * to the first enabled filtered row; -1 means every visible row is disabled.
    */
   readonly active: number
   /** A select() settlement is in flight: further select/search/highlight no-op until it settles. */
@@ -116,7 +116,7 @@ export function filterOptions(
 
 /**
  * Highlight index for a freshly loaded row list: the row marked as the current
- * value when the live search still shows it, else the top row. Opening parks
+ * value when the live search still shows it, else the first enabled row. Opening parks
  * the highlight on the value the session already uses, so an accept gesture
  * made without looking confirms that value instead of the topmost row.
  * @param options - the loaded rows.
@@ -125,8 +125,13 @@ export function filterOptions(
  * @returns index into the filtered rows.
  */
 function currentIndex(options: readonly SelectOption[], search: string, mode: PopupSearchMode): number {
-  const at = filterOptions(options, search, mode).findIndex(option => option.active === true)
-  return at === -1 ? 0 : at
+  const rows = filterOptions(options, search, mode)
+  const at = rows.findIndex(option => option.active === true && !option.disabled)
+  return at === -1 ? firstEnabled(rows) : at
+}
+
+function firstEnabled(rows: readonly SelectOption[]): number {
+  return rows.length === 0 ? 0 : rows.findIndex(option => !option.disabled)
 }
 
 /** One open shell's bindings (spec + open-time context + segment snapshot + options-fetch abort). */
@@ -211,11 +216,11 @@ export class PopupSelectController<TCtx = unknown> {
   setSearch(search: string): void {
     const s = this.state.getSnapshot()
     if (!s.open || s.submitting || s.confirming !== null || search === s.search) return
-    this.state.set({ ...s, search, active: 0 })
+    this.state.set({ ...s, search, active: firstEnabled(filterOptions(s.options, search, s.searchMode)) })
   }
 
   /**
-   * Move the highlight across the filtered rows (wraps around; no-op unless
+   * Move the highlight across enabled filtered rows (wraps around; no-op unless
    * options are ready and no selection is in flight).
    * @param dir - +1 down, -1 up.
    */
@@ -224,8 +229,13 @@ export class PopupSelectController<TCtx = unknown> {
     if (!s.open || s.status !== 'ready' || s.submitting || s.confirming !== null) return
     const rows = filterOptions(s.options, s.search, s.searchMode)
     if (rows.length === 0) return
-    const active = (s.active + dir + rows.length) % rows.length
-    this.state.set({ ...s, active })
+    const start = s.active < 0 ? (dir === 1 ? -1 : 0) : s.active
+    for (let step = 1; step <= rows.length; step += 1) {
+      const active = (start + dir * step + rows.length) % rows.length
+      if (rows[active]?.disabled) continue
+      this.state.set({ ...s, active })
+      return
+    }
   }
 
   /**
@@ -236,7 +246,8 @@ export class PopupSelectController<TCtx = unknown> {
   highlight(index: number): void {
     const s = this.state.getSnapshot()
     if (!s.open || s.status !== 'ready' || s.submitting || s.confirming !== null) return
-    if (index < 0 || index >= filterOptions(s.options, s.search, s.searchMode).length || index === s.active) return
+    const option = filterOptions(s.options, s.search, s.searchMode)[index]
+    if (option === undefined || option.disabled || index === s.active) return
     this.state.set({ ...s, active: index })
   }
 
@@ -255,7 +266,7 @@ export class PopupSelectController<TCtx = unknown> {
     const s = this.state.getSnapshot()
     if (binding === null || !s.open || s.status !== 'ready' || s.submitting || s.confirming !== null) return
     const option = filterOptions(s.options, s.search, s.searchMode)[index]
-    if (option === undefined) return
+    if (option === undefined || option.disabled) return
     if (option.confirmation !== undefined) {
       this.state.set({ ...s, confirming: option, acknowledged: false, error: null })
       return

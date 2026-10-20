@@ -1757,6 +1757,11 @@
       "source": "packages/session/session-persistence/src/index.ts"
     },
     {
+      "doc": "docs/subsystems/persistence.md",
+      "symbol": "SessionPersistenceDeleteOptions",
+      "source": "packages/session/session-persistence/src/index.ts"
+    },
+    {
       "doc": "docs/subsystems/session-query.md",
       "symbol": "SessionResultFilter",
       "source": "packages/session-query/session-query/src/types.ts"

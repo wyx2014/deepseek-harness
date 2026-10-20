@@ -2,6 +2,8 @@ import { MessageId } from '@deepseek-ai/dsh-llm/brand'
 // @vitest-environment jsdom
 /** Chat inject factories exercised over independently mounted Conversation and Chat plugins. */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { projectUserText, type UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
+import { fireEvent, render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ISession, SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -137,6 +139,27 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
 }
 
 describe('Chat inject API', () => {
+  it('binds a late reference provider to the viewed Session and releases its catalog on disposal', async () => {
+    const b = await bench()
+    try {
+      const { injected } = b.chatViewApi(b.rootReference)
+      const observed = injected.hooks.textReferences
+      expect(observed.getSnapshot()).toEqual([])
+      const references = createSnapshotStore<readonly UserTextReference[]>([
+        { text: '$review', kind: 'skill', name: 'review' },
+        { text: '@聚源', kind: 'mcp', name: '聚源' },
+      ])
+      const sessionOf = vi.fn(() => ({ textReferences: references }))
+      const dispose = b.runtime.ctx.provide('inputTriggers', { sessionOf } as never)
+      await vi.waitFor(() => { expect(observed.getSnapshot()).toEqual(references.getSnapshot()) })
+      expect(sessionOf).toHaveBeenCalledWith(b.runtime.sessions.scope(ROOT))
+      references.set([{ text: '@Research', kind: 'mcp', name: 'Research' }])
+      expect(observed.getSnapshot()).toEqual(references.getSnapshot())
+      expect(b.chatFlowApi(b.rootReference).injected.hooks.textReferences).toBe(observed)
+      dispose()
+      await vi.waitFor(() => { expect(observed.getSnapshot()).toEqual([]) })
+    } finally { await b.runtime.dispose() }
+  })
   it('projects independent Settings choices without saving timing to Host settings', async () => {
     const b = await bench()
     try {
@@ -392,7 +415,7 @@ describe('Chat inject API', () => {
     const { injected } = b.chatViewApi(b.rootReference)
     injected.openSkill('review')
     const openReference = vi.fn(() => true)
-    const sessionOf = vi.fn(() => ({ openReference }))
+    const sessionOf = vi.fn(() => ({ openReference, textReferences: createSnapshotStore([]) }))
     b.runtime.ctx.provide('inputTriggers', { sessionOf } as never)
     injected.openSkill('review')
     expect(sessionOf).toHaveBeenCalledWith(b.runtime.sessions.scope(ROOT))
@@ -401,6 +424,23 @@ describe('Chat inject API', () => {
     injected.openSkill('review')
     expect(openReference).toHaveBeenCalledTimes(1)
     await b.runtime.dispose()
+  })
+
+  it('routes a catalog-backed skill click to the sidebar document without the native skill provider', async () => {
+    const b = await bench()
+    const { injected } = b.chatViewApi(b.rootReference)
+    const view = render(<div>{projectUserText('$review', [], [], 'skill', injected, [
+      { text: '$review', kind: 'skill', name: 'review', path: '/personal/skills/review/SKILL.md' },
+    ])}</div>)
+    try {
+      fireEvent.click(view.getByRole('button', { name: '/review' }), { detail: 1 })
+      expect(b.sidebarRight.openResource).toHaveBeenCalledWith(
+        'dsh-resource://file/session/root-1//personal/skills/review/SKILL.md',
+      )
+    } finally {
+      view.unmount()
+      await b.runtime.dispose()
+    }
   })
 
   it('keeps a relative path under the Session without a cwd, and addresses a path outside the workspace absolutely', async () => {

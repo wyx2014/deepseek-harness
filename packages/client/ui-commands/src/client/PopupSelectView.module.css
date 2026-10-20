@@ -48,6 +48,11 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.row[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .rowActive {
   background: var(--dsw-alias-interactive-bg-hover);
 }

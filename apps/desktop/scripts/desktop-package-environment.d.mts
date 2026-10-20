@@ -8,6 +8,13 @@
 export function localMacOSPackageEnvironment(environment?: NodeJS.ProcessEnv): NodeJS.ProcessEnv
 
 /**
+ * Prepare an explicitly selected unsigned Windows product without an update service.
+ * @param environment Parent environment, retained only for build tools.
+ * @returns Isolated local settings; no dotenv or ambient release settings are used.
+ */
+export function standaloneWindowsPackageEnvironment(environment?: NodeJS.ProcessEnv): NodeJS.ProcessEnv
+
+/**
  * Read the target's required UTF-8 dotenv file; release settings never fall back to ambient values.
  * @param platform Target platform.
  * @param environment Parent environment, retained only for unrelated build tools.
@@ -30,5 +37,5 @@ export function loadDesktopPackageEnvironment(
 export function validateDesktopPackageEnvironment(
   environment: NodeJS.ProcessEnv,
   target: { platform: 'win32' | 'darwin', arch: string },
-  options?: { unsigned?: boolean, prepareOnly?: boolean },
+  options?: { unsigned?: boolean, prepareOnly?: boolean, standalone?: boolean },
 ): void

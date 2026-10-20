@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+Importers can reuse `parseSkillFrontmatter()` and `parseSkillInvocationPolicy()` to validate the same YAML document and invocation controls as discovery. Invalid YAML, legacy invocation aliases and malformed booleans are rejected before publication.
+
 ## Summary
 
 Agents can use local skills from the repository, a custom directory, or the user's agent configuration: author a skill as a directory bundle with a `SKILL.md` or a flat `<name>.md` file under any scanned root, and it appears in the session catalog. The provider discovers the project, custom, and user roots, parses each skill's YAML frontmatter, and watches the directories, so new, renamed, or deleted skills reach agents without a restart. Choose it when skills live on disk — the registry (`dsh-skill`) accepts any provider, and another provider can supply skills from elsewhere.

@@ -36,6 +36,7 @@ import type { SessionRemotes } from './remotes.ts'
 import { ProjectionValueStore } from './projection-store.ts'
 import type { ProjectionsBaseline } from './projection-store.ts'
 import { resolvedClientTimeZone } from '../time-zone.ts'
+import type {} from '../contract/prompt-admission.ts'
 import {
   ClientAssistantStream,
   type ClientAssistantStreamResult,
@@ -268,13 +269,17 @@ export class Session implements SessionFace {
     let result: RemoteResult<{ accepted: true }>
     if (this.address === undefined) {
       const clientTimeZone = resolvedClientTimeZone()
-      result = await this.remote.session.prompt({
+      const request = {
         requestId: requestId ?? randomUUID() as SessionRequestId,
         sessionId: this.sessionId,
         mode,
         content,
         clientTimeZone,
-      }, signal)
+      }
+      const send = () => this.remote.session.prompt(request, signal)
+      result = this.actx === undefined ? await send() : await this.actx.waterfall(
+        'client-session/prompt-admission', { request, signal }, send,
+      )
     } else if (content.some(part => part.type === 'file')) {
       result = {
         ok: false,

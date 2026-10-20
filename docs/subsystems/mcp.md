@@ -44,6 +44,8 @@ The client is a per-server connection plugin and a consumer of the harness tool 
 
 Configured `serverName` identifies a server in its registration scope. Two entries in that scope cannot reserve the same name; separate Agent scopes can reuse it. Public tool names include the configured server name, so equally named tools from different servers remain distinct. Registration effects own names and discovered tools; plugin disposal closes the connection and removes its contributions.
 
+The scoped `mcp/connection-status` event reports `McpConnectionStatus` without credentials: `serverName`, `state` (`connecting`, `connected`, `reconnecting`, `disconnected`, or `error`), connection `generation`, registered `toolCount`, and `observedAt` as Unix milliseconds. Consumers can display connection progress and tool availability without exposing transport configuration.
+
 The [native Cua Driver provider](../../packages/experimental/computer-use-cua-driver-native/README.md) shares the client's exported result adapter without opening an MCP connection. Desktop provider selection belongs to the [computer-use subsystem](computer-use.md).
 
 -----
@@ -136,4 +138,25 @@ register(server: string, provider: McpResourceProvider): () => void
 ```
 
 Source: [`packages/mcp/mcp-resources/src/index.ts`](../../packages/mcp/mcp-resources/src/index.ts)
+
+<a id="mcp-events"></a>
+
+### `mcp/*` events
+
+<a id="mcpconnection-status--parallel"></a>
+
+#### `mcp/connection-status` — parallel
+
+A server connection changed state or its registered tool count changed.
+
+```ts cordis-catalog
+/**
+ * A server connection changed state or its registered tool count changed.
+ * @mode parallel
+ * @param status Credential-free observation of the current connection generation.
+ */
+'mcp/connection-status'(status: McpConnectionStatus): void
+```
+
+Source: [`packages/mcp/mcp-client/src/connection.ts`](../../packages/mcp/mcp-client/src/connection.ts)
 <!-- END GENERATED cordis-surface -->

@@ -88,6 +88,36 @@ describe('filterOptions', () => {
 })
 
 describe('open and options load', () => {
+  it('skips disabled options for default focus, arrows, hover and selection, including an all-disabled search', async () => {
+    const onSelect = vi.fn()
+    const disabled = { ...GATED, disabled: true, active: true }
+    const { popup, deps } = await readyPopup({ options: async () => [disabled, OPTIONS[0]!, { id: 'off', label: 'Unavailable', disabled: true }, OPTIONS[2]!], onSelect })
+    expect(popup.state.getSnapshot().active).toBe(1)
+    popup.move(1)
+    expect(popup.state.getSnapshot().active).toBe(3)
+    popup.move(1)
+    expect(popup.state.getSnapshot().active).toBe(1)
+    popup.move(-1)
+    expect(popup.state.getSnapshot().active).toBe(3)
+    popup.highlight(0)
+    expect(popup.state.getSnapshot().active).toBe(3)
+    await popup.select(0)
+    expect(popup.state.getSnapshot().confirming).toBeNull()
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(deps.consume).not.toHaveBeenCalled()
+    popup.setSearch('Unavailable')
+    expect(popup.state.getSnapshot().active).toBe(-1)
+    popup.move(1)
+    popup.move(-1)
+    await popup.select(0)
+    expect(popup.state.getSnapshot().active).toBe(-1)
+    expect(onSelect).not.toHaveBeenCalled()
+    popup.setSearch('Dark')
+    await popup.select(0)
+    expect(onSelect).toHaveBeenCalledWith(OPTIONS[0], CTX_A)
+    expect(deps.consume).toHaveBeenCalledOnce()
+  })
+
   it('publishes pending immediately, ready when options land', async () => {
     const popup = new PopupSelectController<Ctx>(makeDeps())
     let release!: (options: readonly SelectOption[]) => void

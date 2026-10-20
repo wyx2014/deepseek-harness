@@ -7,6 +7,8 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
+导入器可复用 `parseSkillFrontmatter()` 与 `parseSkillInvocationPolicy()`，按发现流程一致的规则解析 YAML 文档及调用控制。在发布目录前拒绝无效 YAML、旧调用字段别名和错误布尔值。
+
 ## 概述
 
 agent（智能体）可以使用来自仓库、自定义目录或用户 agent 配置的本地 skill（技能）：把 skill 编写为任一被扫描根目录下的目录 bundle（内含 `SKILL.md`）或平铺 `<name>.md` 文件，它就会出现在会话目录中。该提供方发现项目、自定义与用户根目录，解析每个 skill 的 YAML frontmatter，并监视这些目录，因此新增、改名或删除的 skill 无需重启即可到达 agent。当 skill 存放在磁盘上时选择它——注册表（`dsh-skill`）接受任意提供方，其他提供方可以从别处提供 skill。

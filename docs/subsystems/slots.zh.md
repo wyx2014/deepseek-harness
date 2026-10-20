@@ -8,6 +8,8 @@ Slots 是 Web Client 的类型化 React 组合系统。[`dsh-client-ui-slots`](.
 
 `plugins.bundle.config` 以 npm 包名为 key，提供 Bundle 详情配置。`plugins.bundle.activation` 在用户显式启用后渲染可选引导，由拥有者提供关闭引导和打开该 Bundle 详情的回调。`conversation.input.activity` 提供模型选择器与发送按钮之间的单个活动控件，可展开工具栏并在卸载时释放展开状态。
 
+`conversation.input.selection` 是 session 作用域的 list，在编辑器上方显示选择状态提示，owner 提供 `locked` 状态与 `focusEditor` 回调。已选能力使用编辑器内的原子引用。[Conversation](../../packages/client/ui-conversation/README.zh.md#temporary-composer-entries) 拥有该 slot 的输入框行为。
+
 插件目录声明 `plugins.add.actions`，它是 root 作用域的 list，在添加插件菜单的安装项之后提供 `MenuItemButton` 行。owner 提供 `onDismiss()`，用于开始动作前关闭菜单。该 slot 遵循所属插件页面声明的生命周期。
 
 ## 声明与生命周期

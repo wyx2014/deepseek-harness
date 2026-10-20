@@ -151,7 +151,7 @@ describe('workflow runtime outcomes', () => {
     const released = Promise.withResolvers<undefined>()
     const schema = { type: 'object' as const, properties: { answer: { type: 'number' as const } } }
     const { ctx, parent, start } = await setup(async (bindings) => {
-      const child = await bindings.startChild!({ prompt: 'answer', schema, model: 'selected' })
+      const child = await bindings.startChild!({ prompt: 'answer', label: 'Financial analyst', schema, model: 'selected' })
       expect(child).toEqual({ callId: 1, childId: 'ready-child' })
       expect(await bindings.childResult!(child)).toEqual({ output: [], structured: { answer: 42 }, stopReason: 'completed' })
       await bindings.disposeChild!(child)
@@ -174,7 +174,7 @@ describe('workflow runtime outcomes', () => {
       const { parent: delegatedParent, ...request } = delegation.request
       expect(delegatedParent).toBe(parent)
       expect({ ...delegation, request }).toEqual({
-        provider: 'stub', label: 'host-test child 1', delivery: 'caller',
+        provider: 'stub', label: 'Financial analyst', delivery: 'caller',
         request: {
           cwd: ctx.workingDirectory.get(parent.session),
           prompt: [{ type: 'text', text: 'answer' }], outputSchema: schema, agentOptions: { model: 'selected' },

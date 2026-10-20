@@ -42,6 +42,8 @@ export interface SelectOption {
    * default pick.
    */
   readonly active?: boolean
+  /** Visible for context but excluded from pointer and keyboard selection. */
+  readonly disabled?: boolean
   /** Optional in-page risk gate owned by the shared popup shell. */
   readonly confirmation?: SelectConfirmation
 }
@@ -101,6 +103,8 @@ export type CommandUiSpec = PopupSelectSpec | ActionSpec
 export interface CommandContribution {
   /** Command name without the leading slash (unique across contributions). */
   readonly name: string
+  /** Join Add; omitted contributions follow the native section order. */
+  readonly section?: 'add'
   /** Localized menu row title; the name itself when absent. */
   label?(): string
   /** Localized menu row description; the row shows none when absent. */

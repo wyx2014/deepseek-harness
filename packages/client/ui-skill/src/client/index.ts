@@ -2,17 +2,16 @@
  * Skill reference plugin, browser half: registers the '/' skill source —
  * candidates from the `skills/list` Remote addressed by the per-call session
  * projection's sessionId (sessions are always agent-backed; the host
- * resolves cwd from the session header). A pick lands the literal `/name `
- * text and the prompt ships the same literal (plain-text-reference decision;
- * see .agents/notes/archived/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md);
- * determinism
+ * resolves cwd from the session header). A pick inserts an atomic skill
+ * reference whose clipboard and prompt projections remain the literal `/name`.
+ * Determinism
  * lives host-side — the pre-step boundary (`dsh-tool-skill`) recognizes a
  * leading `/name` naming a user-invocable skill and injects the rendered
  * body for every entry point, including `disable-model-invocation` skills the
  * model-side catalog never lists (issue #1470). The RPC rides the plugin's
  * root-context Remote captured at registration — the source never reads
- * services off a per-call argument. Draft chip visuals derive from
- * the lexicon scan; this source implements no reference codec.
+ * services off a per-call argument. Hand-typed references retain the lexicon
+ * decoration; menu picks use the composer's shared skill-reference rendering.
  *
  * Catalog fetches are cached per session (the small twin of the ui-commands
  * directory): the per-keystroke candidates re-poll filters a settled
@@ -160,6 +159,7 @@ export function apply(ctx: ClientContext): void {
     trigger: '/',
     name: 'skill',
     order: 2,
+    codec: { clipboardText: ref => ref, serialize: ref => Promise.resolve(ref) },
     async candidates(session, { query, signal }) {
       if (sessions.subagentAddress(session.sessionId) !== undefined) return []
       const skills = await fetchCatalog(session.sessionId).promise
@@ -214,14 +214,10 @@ export function apply(ctx: ClientContext): void {
       return true
     },
     onPick({ candidate }) {
-      // Plain-text-reference decision (web-input-machine note): the pick
-      // lands plain text and the prompt ships the same
-      // literal. Determinism lives host-side — the host's
-      // pre-step boundary (dsh-tool-skill) recognizes the leading /name and
-      // injects the rendered body for every entry point. A name shared with a
-      // host command still resolves to the command: adjudication claims the
-      // line client-side before it ever becomes a prompt.
-      return { text: `/${candidate.name} ` }
+      return { insert: {
+        source: 'skill', ref: `/${candidate.name}`, label: candidate.name,
+        appearance: 'skill', clipboardText: `/${candidate.name}`,
+      } }
     },
   }
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract

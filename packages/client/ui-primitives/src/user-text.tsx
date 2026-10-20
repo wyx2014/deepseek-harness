@@ -2,9 +2,10 @@
  * Display projection of reference forms in sent user text (bubble and queue
  * rows). The logged model text remains the single truth; this is presentation
  * only. Inline references follow the consumer's wrapping policy and keep long
- * labels within its width. Four decoration sources, by precedence: the wire session form
+ * labels within its width. Decoration sources, by precedence: the wire session form
  * `@[label](dsh-session:...)` folds to its label; exact session labels
- * supplied by an adjacent recall decorate their bare `@label` mention; plain
+ * supplied by an adjacent recall decorate their bare `@label` mention; exact
+ * capability mentions preserve their catalog's skill/MCP/team identity; plain
  * `@name` word-boundary tokens decorate by shape alone; and a plain `/name`
  * token decorates only when the caller names it — a skill the host actually
  * loaded for that message (ui-chat reads the step's `skill-invocation`
@@ -31,16 +32,28 @@ interface DecorationRange {
   readonly end: number
   /** Matched source text (hover title). */
   readonly label: string
-  readonly kind: 'session' | 'plain'
+  readonly kind: 'session' | 'plain' | 'capability'
+  readonly reference?: UserTextReference
   /** Pre-resolved display text (wire folds); derived from label when absent. */
   readonly display?: string
+}
+
+/** Exact capability mentions supplied by the reference source's catalog. */
+export interface UserTextReference {
+  /** Complete serialized token, including its trigger. */
+  readonly text: string
+  readonly kind: 'skill' | 'mcp' | 'team'
+  /** Skill lookup name or connector/team display name. */
+  readonly name: string
+  /** Absolute skill document path, independent of whether the skill is currently enabled. */
+  readonly path?: string
 }
 
 /** Optional navigation supplied by consumers that can preview references. */
 export interface UserTextReferences {
   /** Open a file path decoded from an `@` mention. */
   openFile: (path: string) => void
-  /** Open the source of a skill loaded for this message. */
+  /** Open the current source of a referenced skill. */
   openSkill: (name: string) => void
 }
 
@@ -53,6 +66,7 @@ export interface UserTextReferences {
  * (unsent queue rows pass none).
  * @param slashKind - the chip kind those tokens render as.
  * @param references - optional file and skill preview actions; session and command tokens stay labels.
+ * @param textReferences - exact catalog-backed capability mentions; MCP and team mentions stay labels.
  * @returns inline nodes covering the whole text.
  */
 export function projectUserText(
@@ -61,6 +75,7 @@ export function projectUserText(
   slashNames: readonly string[] = [],
   slashKind: 'skill' | 'command' = 'skill',
   references?: UserTextReferences,
+  textReferences: readonly UserTextReference[] = [],
 ): ReactNode {
   const ranges: DecorationRange[] = []
   SESSION_WIRE_RE.lastIndex = 0
@@ -82,6 +97,18 @@ export function projectUserText(
       start = text.indexOf(label, start + label.length)
     }
   }
+  for (const reference of textReferences) {
+    if (reference.text.length <= 1) continue
+    let start = text.indexOf(reference.text)
+    while (start >= 0) {
+      const end = start + reference.text.length
+      if ((start === 0 || /\s/u.test(text.charAt(start - 1)))
+        && /^[.,;:!?，。；：！？]*(?:\s|$)/u.test(text.slice(end))) {
+        ranges.push({ start, end, label: reference.text, kind: 'capability', reference })
+      }
+      start = text.indexOf(reference.text, end)
+    }
+  }
   // A `/` token ends at whitespace or the text end like the host skill
   // gesture; only `@` tokens shed sentence punctuation below.
   const re = /(^|\s)(\/[\w-]+(?=\s|$)|@"[^"\n]+"|@[^\s]+)/gu
@@ -96,7 +123,7 @@ export function projectUserText(
     if (label.startsWith('/') && !slashNames.includes(label.slice(1))) continue
     ranges.push({ start: tokenStart, end: tokenStart + label.length, label, kind: 'plain' })
   }
-  const rankOf = (range: DecorationRange): number => range.kind === 'session' ? 0 : 1
+  const rankOf = (range: DecorationRange): number => range.kind === 'session' ? 0 : range.kind === 'capability' ? 1 : 2
   ranges.sort((a, b) => a.start - b.start || rankOf(a) - rankOf(b) || b.end - a.end)
   const parts: ReactNode[] = []
   let cursor = 0
@@ -105,32 +132,40 @@ export function projectUserText(
   }
   for (const range of ranges) {
     if (range.start < cursor) continue
-    const { start: tokenStart, end, label, kind } = range
+    const { start: tokenStart, end, label, kind, reference } = range
     if (tokenStart > cursor) pushPlain(cursor, tokenStart)
-    const referenceKind = kind === 'session'
+    const referenceKind = reference?.kind ?? (kind === 'session'
       ? 'session'
       : label.startsWith('@')
         ? label.replace(/^@"|"$/gu, '').endsWith('/') ? 'folder' : 'file'
-        : undefined
-    const displayLabel = range.display
+        : undefined)
+    const displayLabel = reference !== undefined
+      ? reference.kind === 'skill' ? `/${reference.name}` : reference.name
+      : range.display
       ?? (referenceKind === undefined
         ? label
         : referenceKind === 'session'
           ? label.slice(1)
           : label.slice(1).replace(/^"|"$/gu, '').split(/[\\/]/u).filter(Boolean).at(-1) ?? label.slice(1))
     const contents = <>
-      {referenceKind !== undefined && (
+      {referenceKind !== undefined && referenceKind !== 'skill' && (
         <ReferenceIconRegular kind={referenceKind} size={16} className={css.refIcon} />
       )}
       {displayLabel}
     </>
     const open = references === undefined ? undefined
-      : referenceKind === 'file'
-        ? () => { references.openFile(label.slice(1).replace(/^"|"$/gu, '')) }
-        : referenceKind === undefined && slashKind === 'skill'
-          ? () => { references.openSkill(label.slice(1)) }
-          : undefined
-    const className = clsx(css.refChip, referenceKind === undefined && css.slashChip)
+      : reference?.kind === 'skill'
+        ? () => {
+          if (reference.path === undefined) references.openSkill(reference.name)
+          else references.openFile(reference.path)
+        }
+        : referenceKind === 'file'
+          ? () => { references.openFile(label.slice(1).replace(/^"|"$/gu, '')) }
+          : referenceKind === undefined && slashKind === 'skill'
+            ? () => { references.openSkill(label.slice(1)) }
+            : undefined
+    const className = clsx(css.refChip, (referenceKind === undefined || referenceKind === 'skill') && css.slashChip,
+      (referenceKind === 'mcp' || referenceKind === 'team') && css.capabilityLabel)
     parts.push(open === undefined
       ? <span key={tokenStart} className={className} data-ref-chip={referenceKind ?? slashKind} title={label}>
         {contents}

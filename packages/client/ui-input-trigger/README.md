@@ -33,6 +33,8 @@ The composer surface keeps focus while the menu is open: rows pick on mousedown,
 
 A source may implement `openReference(session, reference)` to open a draft reference without submitting it. Acceptance may precede asynchronous catalog loading. Chips route by source name; editable tokens route through the current source lexicon. Returning `false`, a missing source, or a disposed controller leaves the editor gesture unchanged.
 
+A source can publish exact sent-text capability mentions through `textReferences(session)`. The controller exposes their catalog-backed domain and lookup name as an observable `textReferences` snapshot. `subscribeLexicon` invalidates both reference projections and draft lexicons; registration, catalog warmup, and disposal update live consumers. These display hints do not change serialized model text.
+
 -----
 
 <a id="understand-the-implementation"></a>

@@ -236,6 +236,8 @@ The model-facing `skill({ name })` tool validates the kebab-case name, finds the
 
 `SkillListRequest` addresses one Session by `sessionId`; `SkillListValue` returns the user-invocable entries with name, description, optional usage guidance, and model-invocation availability. `SessionSkillCatalog` reads the Session cwd and recorded preset without activating an Agent. A live Agent may supply its scoped registry, while a cold Session uses the preset's standing scope.
 
+Management policies apply to all execution reads after duplicate resolution and again after asynchronous loading. `SkillRegistry.inventory()` is a management observation that retains disabled and shadowed candidates; it does not grant invocation rights. Each `registerPolicy()` contribution belongs to its calling scope and withdraws with that scope. Native settings and provider roots remain the owners of persistence.
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -270,6 +272,20 @@ Source: [`packages/api/session-controller/src/skill-catalog.ts`](../../packages/
 Layered registry of skill providers, the host+per-scope shape the tools registry established. A registration files into the layer of its calling context's scope (scopeOf): host rows and repository plugins land in the global layer, while a plugin mounted by an agent preset's standing composition lands in that preset's layer. A read merges the global layer with the viewing scope's chain — the nearest layer's entry wins a duplicate name outright, and the rank order decides duplicates only within one layer. It exposes sorted invocation-neutral summaries and loads full skill bodies on demand.
 
 ```ts cordis-catalog
+/**
+ * Register a management policy in the calling scope. Denials compose across the viewing chain.
+ * @param create - policy factory; invalidate after changing borrowed policy state.
+ * @returns disposer removing this exact policy and invalidating discovery consumers.
+ */
+registerPolicy(create: (control: SkillProviderControl) => SkillEnablePolicy): () => void
+
+/**
+ * Inspect actual provider candidates, including disabled and shadowed installs.
+ * @param options - workspace and viewing scope; policies are evaluated in that same scope.
+ * @returns management candidates and discovery completeness; never use this view to authorize loading.
+ */
+async inventory(options: SkillViewOptions = {}): Promise<{ entries: SkillInventoryEntry[]; complete: boolean }>
+
 /**
  * Register a borrowed same-process provider synchronously during plugin
  * apply, into the calling context's layer: a scoped context (an agent

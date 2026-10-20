@@ -78,6 +78,24 @@ function rowLabels(): string[] {
 }
 
 describe('PopupSelectView', () => {
+  it('shows unavailable options but excludes them from mouse and keyboard acceptance', async () => {
+    const onSelect = vi.fn()
+    const { search, consume } = await mountOpen({
+      options: async () => [{ id: 'off', label: 'Unavailable', disabled: true, active: true }, OPTIONS[0]!], onSelect,
+    })
+    const disabled = screen.getByRole('option', { name: 'Unavailable' })
+    expect(disabled.getAttribute('aria-disabled')).toBe('true')
+    expect(disabled.getAttribute('aria-selected')).toBe('false')
+    fireEvent.mouseEnter(disabled)
+    fireEvent.click(disabled)
+    expect(onSelect).not.toHaveBeenCalled()
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
+    expect(screen.getByRole('option', { name: 'Dark' }).getAttribute('aria-selected')).toBe('true')
+    await act(async () => { fireEvent.keyDown(search, { key: 'Enter' }) })
+    expect(onSelect).toHaveBeenCalledWith(OPTIONS[0], 'ctx-A')
+    expect(consume).toHaveBeenCalledOnce()
+  })
+
   it('renders provider groups and selects the same fuzzy-ranked row the user sees', async () => {
     const alpha = { name: 'alpha', label: 'Alpha provider' }
     const beta = { name: 'beta', label: 'Beta provider' }

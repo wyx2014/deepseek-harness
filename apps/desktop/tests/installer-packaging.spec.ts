@@ -12,6 +12,16 @@ vi.mock('node:child_process', async (importOriginal) => {
 })
 
 describe('installer preparation preserves application dependencies', () => {
+  it('standalone Windows products omit update configuration and reject signed use', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const env = { DSH_DESKTOP_APP_ID: 'com.example.product', DSH_DESKTOP_UNSIGNED: '1',
+      DSH_DESKTOP_STANDALONE: '1', DSH_DESKTOP_PRODUCT_CONFIG: '/product/desktop-product.json' }
+    const config = createElectronBuilderConfig(env, 'win32', 'x64')
+    expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+    expect(config.publish).toBeNull()
+    expect(config.win.forceCodeSigning).toBe(false)
+    expect(() => createElectronBuilderConfig({ ...env, DSH_DESKTOP_UNSIGNED: '0' }, 'win32', 'x64')).toThrow(/unsigned Windows product/u)
+  })
   it.each(['win32', 'darwin'] as const)('rejects a missing production policy before signing on %s', async (platform) => {
     const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
     expect(() => createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.installer',
@@ -77,6 +87,25 @@ describe('installer preparation preserves application dependencies', () => {
     expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
   })
 
+  it('uses product branding and keeps standalone Python libraries outside ASAR', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const environment = {
+      DSH_DESKTOP_APP_ID: 'com.example.product',
+      DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+      DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
+      DSH_DESKTOP_TARGET_PLATFORM: 'win32', DSH_DESKTOP_TARGET_ARCH: 'x64', DSH_DESKTOP_UNSIGNED: '1',
+      DSH_DESKTOP_PRODUCT_NAME: 'Example Product', DSH_DESKTOP_ARTIFACT_PREFIX: 'example-product', DSH_DESKTOP_PRODUCT_ICON: '/product/icon.png',
+    }
+    const config = createElectronBuilderConfig(environment, 'win32', 'x64')
+    expect(config.productName).toBe('Example Product')
+    expect(config.extraMetadata.productName).toBe('Example Product')
+    expect(config.appId).toBe('com.example.product')
+    expect(config.artifactName).toBe('example-product-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.win.icon).toBe('/product/icon.png')
+    expect(config.asarUnpack).toContain('**/runtime/python/**/*')
+    expect(() => createElectronBuilderConfig({ ...environment, DSH_DESKTOP_ARTIFACT_PREFIX: '../outside' }, 'win32', 'x64')).toThrow(/invalid product/u)
+  })
+
   it('packages every preload entry point the shell loads', async () => {
     const { readdirSync, readFileSync } = await import('node:fs')
     const sourceDirectory = new URL('../src/', import.meta.url)
@@ -97,6 +126,7 @@ describe('installer preparation preserves application dependencies', () => {
       APPLE_KEYCHAIN_PROFILE: 'installer-test',
     }, 'darwin', 'arm64')
     const packaged = new Set(config.files.filter((entry): entry is string => typeof entry === 'string'))
+    expect(packaged.has('lib/tpcowork-browser/**/*')).toBe(true)
     for (const name of referenced) expect(packaged.has(`lib/${name}`)).toBe(true)
   })
 })

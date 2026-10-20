@@ -18,6 +18,9 @@ import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { en, zh } from '../src/client/locales.ts'
+import type { WorkspaceSessionGroup } from '../src/client/session-groups.ts'
+
+const noSessionGroups: readonly WorkspaceSessionGroup[] = []
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
@@ -108,6 +111,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   const store = createWorkspaceViewStore().create()
   const props: WorkspaceBrowserProps = {
     useShortcuts: select => select([]),
+    useSessionGroups: select => select(noSessionGroups),
     useWorkspaceShortcuts: bindSnapshotSelector(controls.state),
     requestSearch: controls.search,
     requestAddWorkspace: controls.add,
@@ -151,6 +155,22 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('opens, collapses and restores virtual scheduled Sessions without a project', () => {
+    const sessions = sessionState([summary('scheduled-run', 10), summary('ordinary', 5)])
+    const sessionGroups: readonly WorkspaceSessionGroup[] = [{ key: 'scheduled', label: '定时任务', icon: 'clock', sessionIds: [sid('scheduled-run')] }]
+    const b = mount({
+      useSessions: hook(sessions),
+      useSessionGroups: select => select(sessionGroups),
+    })
+    expect(screen.queryByRole('button', { name: '在“定时任务”中新建会话' })).toBeNull()
+    fireEvent.click(screen.getByText('scheduled-run'))
+    expect(b.props.open).toHaveBeenCalledWith(sid('scheduled-run'))
+    fireEvent.click(screen.getByText('定时任务'))
+    expect(screen.queryByText('scheduled-run')).toBeNull()
+    fireEvent.click(screen.getByText('定时任务'))
+    expect(screen.getByText('scheduled-run')).toBeTruthy()
+    expect(screen.getByText('未分组')).toBeTruthy()
+  })
   it.each([{ messages: en, common: commonEn }, { messages: zh, common: commonZh }])('shows localized fork failures and dismisses them', ({ messages, common }) => {
     const b = mount({ t: makeTranslate(messages, common) })
     act(() => { b.controls.forkFailed('unavailable') })

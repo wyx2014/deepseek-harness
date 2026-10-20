@@ -8,7 +8,8 @@ import type { DesktopPolicyState } from '../src/mandatory-update-policy.ts'
 import type { DesktopUpdateState } from '../src/ipc.ts'
 
 const native = vi.hoisted(() => ({ handlers: new Map<string, (...args: unknown[]) => unknown>(),
-  open: vi.fn<(...args: unknown[]) => Promise<void>>(), write: vi.fn(), read: vi.fn(), quit: vi.fn() }))
+  open: vi.fn<(...args: unknown[]) => Promise<void>>(), write: vi.fn<(text: string) => void>(),
+  read: vi.fn<() => string>(), quit: vi.fn() }))
 vi.mock('electron', () => ({ ipcMain: {
   handle: (channel: string, handler: (...args: unknown[]) => unknown) => native.handlers.set(channel, handler),
   removeHandler: (channel: string) => native.handlers.delete(channel),
@@ -103,7 +104,7 @@ it('offers copy immediately while browser opening is pending and keeps navigatio
   const f = setup()
   const opened = Promise.withResolvers<undefined>()
   native.open.mockReturnValueOnce(opened.promise)
-  native.read.mockResolvedValue('https://downloads.example.com/desktop')
+  native.read.mockReturnValue('https://downloads.example.com/desktop')
   const pending = f.action('page')
   expect(f.view().navigation).toEqual({ page: 'requested' })
   await f.action('copy')
@@ -115,22 +116,25 @@ it('offers copy immediately while browser opening is pending and keeps navigatio
   expect(f.view().policy.blocking).toBe(true)
 })
 
-it('reports clipboard failure and ignores completion after the policy destination changes', async () => {
+it('reports clipboard failure and ignores browser completion after the policy destination changes', async () => {
   const f = setup()
-  native.read.mockResolvedValue('different clipboard contents')
+  native.read.mockReturnValue('different clipboard contents')
   await f.action('page')
   await f.action('copy')
   expect(f.view().navigation?.copy).toBe('failed')
-  const pendingCopy = Promise.withResolvers<undefined>()
-  native.write.mockReturnValueOnce(pendingCopy.promise)
-  const pending = f.action('copy')
+  native.write.mockImplementationOnce(() => { throw new Error('clipboard unavailable') })
+  await f.action('copy')
+  expect(f.view().navigation?.copy).toBe('failed')
+  const pendingOpen = Promise.withResolvers<undefined>()
+  native.open.mockReturnValueOnce(pendingOpen.promise)
+  const pending = f.action('page')
   f.policy({ blocking: true, checking: false, page: 'https://downloads.example.com/new' })
-  pendingCopy.reject(new Error('old copy failed'))
+  pendingOpen.reject(new Error('old browser request failed'))
   await pending
   expect(f.view().navigation).toBeUndefined()
   f.policy({ blocking: true, checking: false, page: 'https://evil.example/desktop' })
   await expect(f.action('page')).rejects.toThrow(/no allowed/)
-  expect(native.open).toHaveBeenCalledTimes(1)
+  expect(native.open).toHaveBeenCalledTimes(2)
 })
 
 it('rejects same-URL child frames and removes quit from renderer privileges', () => {

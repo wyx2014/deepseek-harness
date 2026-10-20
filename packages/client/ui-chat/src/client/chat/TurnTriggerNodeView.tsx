@@ -1,4 +1,4 @@
-/** An independent, expandable notice explaining a non-human Turn trigger. */
+/** Recorded non-human Turn inputs with source attribution. */
 import { useId, useState, type ComponentType } from 'react'
 import {
   IconAgentPresetOutlineRegular, IconClockOutlineRegular, IconBranchOutlineRegular,
@@ -8,7 +8,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeViewProps } from '../contract/slots.ts'
 import { formatMessageClock } from './message-chrome.ts'
-import { NoticeBody } from './ContextBody.tsx'
+import { ModelFacingContent, NoticeBody } from './ContextBody.tsx'
 import { turnTriggerDetails, type TurnTriggerIcon } from './turn-trigger.ts'
 import css from './TurnTriggerNodeView.module.css'
 
@@ -25,7 +25,7 @@ const TRIGGER_ICONS: Record<TurnTriggerIcon, ComponentType<IconProps>> = {
   plugin: IconCordisPluginOutlineRegular,
 }
 
-/** Render recorded trigger attribution above the whole-Turn disclosure. */
+/** Show automation task instructions directly and other trigger bodies in a disclosure. */
 export function TurnTriggerNodeView({ node, t }: Pick<ChatNodeViewProps<'turn-trigger'>, 'node' | 't'>) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
@@ -33,6 +33,12 @@ export function TurnTriggerNodeView({ node, t }: Pick<ChatNodeViewProps<'turn-tr
   const TriggerIcon = TRIGGER_ICONS[details.icon]
   const date = new Date(node.data.time)
   const time = formatMessageClock(node.data.time, t)
+  if (details.scheduledMessage) return (
+    <section className={css.scheduled} data-turn-trigger data-scheduled-message>
+      <div className={css.scheduledAttribution}><IconClockOutlineRegular size={14} aria-hidden /><span>{t('message.scheduled.sent')}</span></div>
+      <div className={css.scheduledPrompt}><ModelFacingContent content={node.data.content} t={t} /></div>
+    </section>
+  )
   return (
     <section className={css.root} data-turn-trigger>
       <button className={css.header} type="button" aria-expanded={open} aria-controls={bodyId} onClick={() => { setOpen(!open) }}>

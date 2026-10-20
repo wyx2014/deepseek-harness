@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-19-prompthub-system-browser-login.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-19-prompthub-system-browser-login.md
+/agent-note-prompthub-system-browser-authentication:
+  en: 6f9e1953a40f4075
+  zh: bb4225dfbed1d847
+/agent-note-prompthub-system-browser-authentication/problem:
+  en: 4cef521d8ab7e879
+  zh: aec34241f578e4bf
+/agent-note-prompthub-system-browser-authentication/decision:
+  en: c35be0201c55b7e2
+  zh: 89e1cdfd1425822a
+/agent-note-prompthub-system-browser-authentication/alternatives-considered:
+  en: 6ceb0f6cf28a1acf
+  zh: 5e80f085087499b3
+/agent-note-prompthub-system-browser-authentication/consequences:
+  en: 4a2ea75da5098ebc
+  zh: 16831047e0ad1b37

@@ -70,6 +70,8 @@ The first successful registration records its identity durably. Repeated calls r
 
 ### Grouping sessions under a project
 
+Durable Session deletion removes its project membership, pin and archive entries through the awaited `session-persistence/deleted` event, then clears the header/path index. A cleanup write failure rejects deletion so its consumer can retain a retryable record; an absent retry finishes the same membership cleanup.
+
 A session joins the project of the directory it runs in: create a session in a project's directory and it appears under that project, newest first. A session can only belong to one project. A session whose directory cannot be validated — no recorded directory, or a moved or deleted folder — cannot join and stays ungrouped.
 
 ### Hiding and restoring sessions, and removing projects

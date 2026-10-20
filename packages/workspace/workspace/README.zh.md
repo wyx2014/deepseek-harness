@@ -70,6 +70,8 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 ### 将会话归入项目
 
+持久化 Session 删除经由等待完成的 `session-persistence/deleted` 事件移除其项目成员、置顶及归档条目，然后清除 header/path 索引。清理写入失败会使删除调用拒绝，消费方可保留可重试记录；缺失重试继续完成相同的成员关联清理。
+
 会话加入它运行目录所在的项目：在项目目录中创建会话，它就会出现在该项目下，新到旧排列。一个会话只能属于一个项目。目录无法校验的会话——没有记录目录，或目录被移动、删除——无法加入，保持 Ungrouped。
 
 ### 隐藏、恢复会话与移除项目

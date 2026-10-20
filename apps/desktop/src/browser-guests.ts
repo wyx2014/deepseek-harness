@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { app, session, type BrowserWindow, type Session, type WebContents } from 'electron'
 import type { DesktopBrowserLeaseId, DesktopBrowserOpenRequest, DesktopBrowserReservation } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
 import { DESKTOP_IPC } from './ipc.ts'
+import type { DesktopBrowserExtension } from './browser-plugin.ts'
 
 interface GuestLease {
   readonly owner: WebContents
@@ -17,8 +18,12 @@ export class DesktopBrowserGuests {
   private readonly partitions = new Map<string, string>()
   private readonly leases = new Map<DesktopBrowserLeaseId, GuestLease>()
 
-  /** @param hostUrl - current authenticated DSH Host, which guests cannot request. */
-  constructor(private readonly hostUrl: () => string | undefined) {}
+  /**
+   * @param hostUrl - Current authenticated DSH Host, which guests cannot request.
+   * @param extension - Optional native plugin that admits and owns its separate guest leases.
+   */
+  constructor(private readonly hostUrl: () => string | undefined,
+    private readonly extension?: Pick<DesktopBrowserExtension, 'willAttach' | 'didAttach'>) {}
 
   /**
    * Reserve one guest in a workspace's process-lifetime partition.
@@ -70,6 +75,7 @@ export class DesktopBrowserGuests {
   bind(window: BrowserWindow, attachInput: (guest: WebContents, name: DesktopBrowserLeaseId) => () => void): void {
     const owner = window.webContents
     owner.on('will-attach-webview', (event, preferences, params) => {
+      if (this.extension?.willAttach(owner, event, preferences, params)) return
       const id = typeof params.src === 'string' && params.src.startsWith('about:blank#')
         ? params.src.slice('about:blank#'.length) : ''
       const lease = this.leases.get(id as DesktopBrowserLeaseId)
@@ -92,6 +98,7 @@ export class DesktopBrowserGuests {
       params.httpreferrer = ''
     })
     owner.on('did-attach-webview', (_event, guest) => {
+      if (this.extension?.didAttach(owner, guest)) return
       let attachedLease: DesktopBrowserLeaseId | undefined
       // The first document is an inert about:blank carrying the approved lease.
       // Bind on the main-process event before the renderer can navigate the ready guest.

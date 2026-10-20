@@ -809,7 +809,7 @@ async function parseSkillFile(path: string, ctx: Context, signal?: AbortSignal, 
   }
   let parsed
   try {
-    parsed = parseFrontmatter(raw.content)
+    parsed = parseSkillFrontmatter(raw.content)
   } catch (error) {
     ctx.logger.warn(`skill file ${path} ignored: invalid YAML frontmatter: ${errorMessage(error)}`)
     return undefined
@@ -830,7 +830,7 @@ async function parseSkillFile(path: string, ctx: Context, signal?: AbortSignal, 
   }
   let invocation
   try {
-    invocation = parseInvocationPolicy(parsed.data)
+    invocation = parseSkillInvocationPolicy(parsed.data)
   } catch (error) {
     ctx.logger.warn(`skill file ${path} ignored: invalid invocation frontmatter: ${errorMessage(error)}`)
     return undefined
@@ -921,7 +921,12 @@ async function nodeEntryKind(fullPath: string, entry: { isDirectory(): boolean; 
   }
 }
 
-function parseFrontmatter(raw: string): { data: Record<string, unknown>; body: string } | undefined {
+/**
+ * Parse the same YAML instruction document used by filesystem discovery.
+ * @param raw - complete UTF-8 skill document supplied by a trusted file read.
+ * @returns metadata and body, or undefined for absent/non-object frontmatter; invalid YAML throws.
+ */
+export function parseSkillFrontmatter(raw: string): { data: Record<string, unknown>; body: string } | undefined {
   const firstLineEnd = raw.indexOf('\n')
   if (firstLineEnd < 0) return undefined
   const firstLine = raw.slice(0, firstLineEnd).replace(/\r$/, '')
@@ -1004,7 +1009,12 @@ function optionalString(data: Record<string, unknown>, key: string): { [K in typ
   return typeof value === 'string' && value.length > 0 ? { [key]: value } : {}
 }
 
-function parseInvocationPolicy(data: Record<string, unknown>): SkillInvocationPolicy {
+/**
+ * Validate and normalize filesystem skill invocation controls for discovery and importers.
+ * @param data - parsed YAML frontmatter; legacy aliases and invalid booleans throw.
+ * @returns the effective model and user invocation controls.
+ */
+export function parseSkillInvocationPolicy(data: Record<string, unknown>): SkillInvocationPolicy {
   rejectLegacyInvocationKey(data, 'disableModelInvocation', 'disable-model-invocation')
   rejectLegacyInvocationKey(data, 'modelInvocable', 'disable-model-invocation')
   rejectLegacyInvocationKey(data, 'userInvocable', 'user-invocable')

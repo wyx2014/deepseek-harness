@@ -3,9 +3,11 @@
  * Inline projection of sent user text: decoration adds no block containers,
  * preserves whitespace, and folds wire session forms to their label.
  */
-import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render } from '@testing-library/react'
-import { projectUserText } from '../src/user-text.tsx'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render } from '@testing-library/react'
+import { projectUserText, type UserTextReference } from '../src/user-text.tsx'
+
+afterEach(cleanup)
 
 const project = (
   text: string,
@@ -16,6 +18,66 @@ const project = (
   render(<div data-host>{projectUserText(text, labels, slashNames, slashKind)}</div>).container.querySelector('[data-host]')!
 
 describe('projectUserText', () => {
+  const capabilities: readonly UserTextReference[] = [
+    { text: '$office-docx', kind: 'skill', name: 'office-docx' },
+    { text: '@聚源', kind: 'mcp', name: '聚源' },
+    { text: '@Research API', kind: 'mcp', name: 'Research API' },
+    { text: '@资产投研团队', kind: 'team', name: '资产投研团队' },
+  ]
+
+  it('gives Add-selected skills the slash preview and leaves MCP and team mentions as labels', () => {
+    const openFile = vi.fn()
+    const openSkill = vi.fn()
+    const view = render(<div>{projectUserText(
+      '$office-docx /office-docx @聚源， @Research API @资产投研团队 @src/report.md',
+      [], ['office-docx'], 'skill', { openFile, openSkill }, capabilities,
+    )}</div>)
+    const skills = view.getAllByRole('button', { name: '/office-docx' })
+    expect(skills).toHaveLength(2)
+    skills.forEach((skill) => { fireEvent.click(skill) })
+    expect(openSkill.mock.calls).toEqual([['office-docx'], ['office-docx']])
+    for (const kind of ['mcp', 'team']) {
+      for (const label of view.container.querySelectorAll(`[data-ref-chip="${kind}"]`)) {
+        expect(label.tagName).toBe('SPAN')
+        expect(label.querySelector('svg')).not.toBeNull()
+        fireEvent.click(label)
+      }
+    }
+    expect(openFile).not.toHaveBeenCalled()
+    fireEvent.click(view.getByRole('button', { name: 'report.md' }))
+    expect(openFile).toHaveBeenCalledWith('src/report.md')
+    expect(view.container.textContent).toBe('/office-docx /office-docx 聚源， Research API 资产投研团队 report.md')
+  })
+
+  it('opens the catalog document when the native skill provider is absent or no longer lists the skill', () => {
+    const openFile = vi.fn()
+    const openSkill = vi.fn()
+    const view = render(<div>{projectUserText('$office-docx', [], [], 'skill', { openFile, openSkill }, [
+      { text: '$office-docx', kind: 'skill', name: 'office-docx', path: '/personal/skills/office-docx/SKILL.md' },
+    ])}</div>)
+    fireEvent.click(view.getByRole('button', { name: '/office-docx' }), { detail: 1 })
+    expect(openFile).toHaveBeenCalledWith('/personal/skills/office-docx/SKILL.md')
+    expect(openSkill).not.toHaveBeenCalled()
+  })
+
+  it('matches complete capability names and preserves unknown dollars, file paths and recalled sessions', () => {
+    const text = '$office-docx-more $office-docx.md $PATH $100 @聚源/data.csv @聚源.json @"聚源" @聚源'
+    const view = render(<div>{projectUserText(text, [], [], 'skill', undefined, capabilities)}</div>)
+    expect(view.container.querySelector('[data-ref-chip="skill"]')).toBeNull()
+    expect(view.container.querySelectorAll('[data-ref-chip="mcp"]')).toHaveLength(1)
+    expect([...view.container.querySelectorAll('[data-ref-chip="file"]')].map(node => node.textContent))
+      .toEqual(['data.csv', '聚源.json', '聚源'])
+    expect(view.container.textContent).toContain('$office-docx-more $office-docx.md $PATH $100')
+    const longest = render(<div>{projectUserText('@Research API Pro', [], [], 'skill', undefined, [
+      ...capabilities, { text: '@Research API Pro', kind: 'mcp', name: 'Research API Pro' },
+    ])}</div>)
+    expect(longest.container.querySelector('[data-ref-chip="mcp"]')?.textContent).toBe('Research API Pro')
+    expect(longest.container.querySelectorAll('[data-ref-chip]')).toHaveLength(1)
+    const recalled = render(<div>{projectUserText('@聚源', ['聚源'], [], 'skill', undefined, capabilities)}</div>)
+    expect(recalled.container.querySelector('[data-ref-chip="session"]')?.textContent).toBe('聚源')
+    expect(recalled.container.querySelector('[data-ref-chip="mcp"]')).toBeNull()
+  })
+
   it('keeps decorated text inline and preserves whitespace between references', () => {
     const host = project('反反复复 /dsh-acp-test @执行几个命令测试', ['执行几个命令测试'], ['dsh-acp-test'])
     expect(host.querySelectorAll('div').length).toBe(0)

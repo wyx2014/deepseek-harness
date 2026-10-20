@@ -208,6 +208,20 @@ export class SessionInputShell implements SessionInput {
 
   // ---- SessionInput face ----
 
+  /** @inheritdoc */
+  syncReferences(source: string, references: readonly ReferenceInsert[]): boolean {
+    if (this.disposed || this.core.state.phase === 'adjudicating' || this.core.state.phase === 'submitting') return false
+    this.draftEditor.syncReferences(source, references)
+    return true
+  }
+
+  /** @inheritdoc */
+  replaceReference(occurrenceId: number, reference: ReferenceInsert): boolean {
+    const phase = this.core.state.phase
+    if (this.disposed || (phase !== 'plain' && phase !== 'claimed')) return false
+    return this.draftEditor.replaceReference(occurrenceId, reference)
+  }
+
   /**
    * Replace the whole draft (persisted-draft seed and programmatic writes).
    * Placeholder-sanitized; newlines split paragraphs; the caret lands at the

@@ -177,6 +177,10 @@ export class DesktopHostProcess {
     private readonly packageManager?: { readonly pnpm: string; readonly nodeBin: string },
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
+    private readonly browserPlugin?: {
+      receive(message: unknown, reply: (message: object) => void): Promise<void>
+      disconnect(): Promise<void>
+    },
   ) {}
 
   /**
@@ -204,6 +208,12 @@ export class DesktopHostProcess {
     child.stderr?.on('data', (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-MAX_HOST_DIAGNOSTIC_CHARS) })
     child.stdout?.pipe(process.stdout)
     child.on('message', (message: unknown) => {
+      if (typeof message === 'object' && message !== null && 'type' in message && message.type === 'tpcowork-browser' && this.browserPlugin) {
+        void this.browserPlugin.receive(message, (reply) => {
+          if (child.connected) child.send(reply, (error) => { if (error) console.error('Desktop browser reply failed', error) })
+        }).catch((error: unknown) => { console.error('Desktop browser request failed', error) })
+        return
+      }
       if (!isDesktopHostEvent(message)) {
         this.fail(new Error('dsh desktop host sent an invalid IPC event'))
         child.kill('SIGTERM')
@@ -228,7 +238,9 @@ export class DesktopHostProcess {
         const suffix = this.stderr.trim() === '' ? '' : `: ${this.stderr.trim()}`
         if (code !== 0 && code !== null) this.fail(new Error(`dsh desktop host exited with ${String(code)}${suffix}`))
         else this.fail(new Error(`dsh desktop host stopped${suffix}`))
-        resolve()
+        void Promise.resolve(this.browserPlugin?.disconnect()).catch((error: unknown) => {
+          console.error('Desktop browser cleanup failed', error)
+        }).finally(resolve)
       })
     })
     return this.readyPromise

@@ -11,7 +11,7 @@ import type { ComponentType } from 'react'
 import type {
   PickOutcome, ReferenceInsert, TokenSpan,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { IconProps, UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 export type {
@@ -213,7 +213,15 @@ export interface InputTriggerSource {
    */
   lexicon?(session: ClientSessionContext): readonly string[] | undefined
   /**
-   * Subscribe to changes of this source's {@link InputTriggerSource.lexicon} answer
+   * Exact capability tokens in sent text, including their domain and lookup name.
+   * This synchronous catalog projection also applies to replayed messages;
+   * it must not fetch or mutate state. Unknown tokens retain ordinary text semantics.
+   * @param session - stable session projection.
+   * @returns known capability mentions, or undefined while the catalog is cold.
+   */
+  textReferences?(session: ClientSessionContext): readonly UserTextReference[] | undefined
+  /**
+   * Subscribe to changes of this source's lexicon or textReferences answer
    * for one session (backing data settled, invalidated, or refreshed). The
    * controller re-polls lexicon on each notification; a source whose roll
    * never changes after warm omits the hook.

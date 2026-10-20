@@ -21,6 +21,8 @@ The Session Controller owns the contiguous loaded logical-event window. Each `Se
 
 Chat and Trajectory may recognize the same durable event family, but each keeps its own Definition State and final node payload. Shared target-neutral machinery is limited to identity routing, ordered replay, Location data, predecessor dependencies, and publication cadence.
 
+The native composer owns its text and atomic references. `SessionInput.syncReferences(source, references)` reconciles one source’s persistent selection at the caret, preserves prose and other reference sources, and retains selected references after sending. `replaceReference(occurrenceId, reference)` transfers one occurrence to its selection owner in place and merges the replacement into the preceding undo step. The source owns its codec and selection validation; it synchronizes removals and undo after the editor commit and waits for native popup token consumption before inserting references. Reference appearance supports sessions, files, folders, skills, MCP connectors, and teams. See the [composer contract](../../packages/client/ui-conversation/README.md#temporary-composer-entries).
+
 ## Target activation
 
 Each Session keeps a monotonic set of active targets. Creating or reading a target source does not activate it. The shell explicitly activates its persisted or newly selected View, while another consumer activates a target through its first source subscription. First activation creates that target's builder and calls `replace()` once from the current target-indexed Contexts. Later flushes call `apply()` for every active target, and unsubscription does not remove one.

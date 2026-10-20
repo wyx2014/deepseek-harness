@@ -274,6 +274,19 @@ export interface SkillProviderControl {
   readonly invalidate: () => void
 }
 
+/** Name-level management policy, applied after duplicate resolution in every execution view. */
+export interface SkillEnablePolicy {
+  /** Return false to deny a name, including every lower-priority provider of that name. */
+  readonly allows: (name: string, options: SkillViewOptions) => boolean
+}
+
+/** Management observation includes disabled and shadowed candidates without authorizing invocation. */
+export interface SkillInventoryEntry {
+  readonly skill: SkillCandidate
+  readonly enabled: boolean
+  readonly selected: boolean
+}
+
 /** Skill registry configuration. */
 export interface Config {
   /** Maximum number of completed cwd/provider catalogs kept in memory. */
@@ -325,6 +338,7 @@ interface CollectResult {
 
 /** One scope's complete skill-registry contribution. */
 class SkillLayer implements ScopeLayer {
+  readonly policies = new Set<SkillEnablePolicy>()
   /** Providers registered through contexts carrying this scope, insertion-ordered. */
   readonly providers: NamedEntries<RegisteredProvider>
   /** Runtime skills registered through contexts carrying this scope. */
@@ -338,7 +352,7 @@ class SkillLayer implements ScopeLayer {
 
   /** Whether every contribution table in this aggregate layer is empty. */
   isEmpty(): boolean {
-    return this.providers.isEmpty() && this.runtime.size === 0
+    return this.providers.isEmpty() && this.runtime.size === 0 && this.policies.size === 0
   }
 }
 
@@ -374,6 +388,72 @@ export class SkillRegistry extends Service {
     super(ctx, 'skills')
     this.collectCacheMaxEntries = config.collectCacheMaxEntries ?? DEFAULT_COLLECT_CACHE_ENTRIES
     assertPositiveInteger('collectCacheMaxEntries', this.collectCacheMaxEntries)
+  }
+
+  /**
+   * Register a management policy in the calling scope. Denials compose across the viewing chain.
+   * @param create - policy factory; invalidate after changing borrowed policy state.
+   * @returns disposer removing this exact policy and invalidating discovery consumers.
+   */
+  registerPolicy(create: (control: SkillProviderControl) => SkillEnablePolicy): () => void {
+    const lifecycle = new AbortController()
+    let active = false
+    let policy: SkillEnablePolicy
+    try {
+      policy = create({ signal: lifecycle.signal, invalidate: () => { if (active) this.invalidateCache() } })
+    } catch (error) {
+      lifecycle.abort(error)
+      throw error
+    }
+    return this.layers.effect(this.ctx, (layer) => {
+      layer.policies.add(policy)
+      active = true
+      return () => {
+        active = false
+        layer.policies.delete(policy)
+        lifecycle.abort()
+      }
+    }, { label: 'skills.registerPolicy()' })
+  }
+
+  /**
+   * Inspect actual provider candidates, including disabled and shadowed installs.
+   * @param options - workspace and viewing scope; policies are evaluated in that same scope.
+   * @returns management candidates and discovery completeness; never use this view to authorize loading.
+   */
+  async inventory(options: SkillViewOptions = {}): Promise<{ entries: SkillInventoryEntry[]; complete: boolean }> {
+    let attempt = 1
+    while (true) {
+      const revision = this.revision
+      const candidates: IndexedCandidate[] = []
+      const winners = new Map<string, IndexedCandidate>()
+      let complete = true
+      for (const layer of [this.layers.global, ...this.layers.chainLayers(options.scope)]) {
+        const observation = await this.listLayerCandidates(layer, options)
+        complete &&= observation.cacheable
+        const local = new Map<string, IndexedCandidate>()
+        for (const entry of observation.entries.sort(compareIndexedCandidates)) {
+          candidates.push(entry)
+          if (!local.has(entry.candidate.name)) local.set(entry.candidate.name, entry)
+        }
+        for (const [name, entry] of local) winners.set(name, entry)
+      }
+      throwIfAborted(options.signal)
+      if (revision !== this.revision && attempt < MAX_COLLECT_ATTEMPTS) { attempt++; continue }
+      return {
+        entries: candidates.map(entry => ({
+          skill: entry.candidate,
+          enabled: this.enabled(entry.candidate.name, options),
+          selected: winners.get(entry.candidate.name) === entry,
+        })),
+        complete: complete && revision === this.revision,
+      }
+    }
+  }
+
+  private enabled(name: string, options: SkillViewOptions): boolean {
+    return [this.layers.global, ...this.layers.chainLayers(options.scope)]
+      .every(layer => [...layer.policies].every(policy => policy.allows(name, options)))
   }
 
   /**
@@ -482,6 +562,7 @@ export class SkillRegistry extends Service {
     const collected = await this.collect(options)
     return {
       skills: [...collected.entries.values()]
+        .filter(entry => this.enabled(entry.candidate.name, options))
         .map(entry => toSummary(entry.candidate))
         .sort(compareSkillSummary),
       complete: collected.cacheable,
@@ -502,12 +583,12 @@ export class SkillRegistry extends Service {
     const collected = await this.collect(options)
     throwIfAborted(options.signal)
     const match = collected.entries.get(name)
-    if (match === undefined) return undefined
+    if (match === undefined || !this.enabled(name, options)) return undefined
     const definition = await waitWithAbort(
       match.provider.get(match.candidate, options),
       options.signal,
     )
-    if (definition === undefined) return undefined
+    if (definition === undefined || !this.enabled(name, options)) return undefined
     validateDefinition(definition)
     if (definition.name !== match.candidate.name) {
       this.invalidateEntry(match)

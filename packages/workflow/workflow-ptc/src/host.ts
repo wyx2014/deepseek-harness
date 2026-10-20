@@ -45,6 +45,7 @@ function json(value: unknown): PtcJsonValue {
 function childRequest(value: unknown): ChildStartRequest {
   const request = object(value)
   const prompt = text(request.prompt, 'prompt')
+  const label = request.label === undefined ? undefined : text(request.label, 'label')
   const provider = request.provider === undefined ? undefined : text(request.provider, 'provider')
   const model = request.model === undefined ? undefined : text(request.model, 'model')
   let schema: ObjectJsonSchema | undefined
@@ -55,6 +56,7 @@ function childRequest(value: unknown): ChildStartRequest {
   }
   return {
     prompt,
+    ...label === undefined ? {} : { label },
     ...provider === undefined ? {} : { provider },
     ...model === undefined ? {} : { model },
     ...schema === undefined ? {} : { schema },
@@ -202,7 +204,7 @@ export class PtcWorkflowRun implements WorkflowRun {
     const callId = ++this.started
     const run = await this.subagents.startActivation({
       provider: this.provider,
-      label: `${this.meta.name} child ${callId}`,
+      label: request.label ?? `${this.meta.name} child ${callId}`,
       delivery: 'caller',
       signal: this.controller.signal,
       request: {

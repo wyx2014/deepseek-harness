@@ -10,6 +10,7 @@ export interface HttpMcpFixture {
   url: string
   calls: string[]
   authorization: Array<string | undefined>
+  urls: string[]
   close: () => Promise<void>
 }
 
@@ -17,6 +18,7 @@ export interface HttpMcpFixture {
 export async function startHttpMcpFixture(): Promise<HttpMcpFixture> {
   const calls: string[] = []
   const authorization: Array<string | undefined> = []
+  const urls: string[] = []
   const handler = createMcpHandler(() => {
     const mcp = new McpServer(
       { name: 'http-fixture', version: '1.0.0' },
@@ -31,6 +33,7 @@ export async function startHttpMcpFixture(): Promise<HttpMcpFixture> {
   const handle = toNodeHandler(handler)
   const handleRequest = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     authorization.push(request.headers.authorization)
+    urls.push(request.url ?? '')
     // The adapter excludes explicit undefined on Node's optional HTTP fields.
     await handle(request as NodeIncomingMessageLike, response)
   }
@@ -47,6 +50,7 @@ export async function startHttpMcpFixture(): Promise<HttpMcpFixture> {
   return {
     url: `http://127.0.0.1:${address.port}/mcp`,
     authorization,
+    urls,
     calls,
     close: async () => {
       await handler.close()

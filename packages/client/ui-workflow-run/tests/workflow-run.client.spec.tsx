@@ -156,6 +156,7 @@ describe('workflow-run Conversation Definition', () => {
     const node = [...(value.snapshot('chat') as ChatSnapshot).nodes.values()][0]!
     expect(node.anchorSeq).toBe(3)
     expect(node.kind).toBe('workflow-run')
+    expect(node.processPlacement).toBe('independent')
   })
 
   it('keeps an update-only tail pending until prepend supplies the unique start', () => {

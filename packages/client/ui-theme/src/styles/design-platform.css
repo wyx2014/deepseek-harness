@@ -2,6 +2,9 @@
    font-weight: 500 in this UI — non-variable webfonts snap intermediate
    weights unpredictably across platforms. */
 body {
+  --dsw-alias-reference-skill: #7c3aed;
+  --dsw-alias-reference-mcp: var(--dsw-static-amber-600);
+  --dsw-alias-reference-team: #6f7a2f;
   --dsw-static-amber-100: rgb(254, 245, 231);
   --dsw-static-amber-400: rgb(247, 173, 49);
   --dsw-static-amber-500: rgb(245, 158, 11);
@@ -83,6 +86,9 @@ body {
 }
 
 body[data-ds-dark-theme] {
+  --dsw-alias-reference-skill: #c4b5fd;
+  --dsw-alias-reference-mcp: var(--dsw-static-amber-400);
+  --dsw-alias-reference-team: #c8cd90;
   --dsw-static-amber-100: rgb(254, 245, 231);
   --dsw-static-amber-400: rgb(247, 173, 49);
   --dsw-static-amber-500: rgb(245, 158, 11);

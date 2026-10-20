@@ -283,15 +283,25 @@
    Read-only; both gaps settled on 12 so the pill chips read as separate
    controls without drifting from the + control. */
 .tools {
+  flex: none;
   gap: 12px;
 }
 
 .modes {
+  flex: none;
   gap: 12px;
 }
 
+.selection {
+  min-width: 0;
+  padding: 0 14px;
+}
+
+.selection:empty { display: none; }
+
 .trailing {
   flex: none;
+  align-self: flex-end;
   /* Wrap keeps the left mode chips and the right controls apart when the card
      runs out of row width: the trailing group (model + send) moves to its own
      line instead of the left group shrinking until its chip overlaps the

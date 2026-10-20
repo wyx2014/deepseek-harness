@@ -10,6 +10,8 @@ export interface ChatConversationViewNode extends ConversationViewNode {
   readonly anchorSeq: number
   readonly location: ConversationLocation
   readonly visibility: 'visible' | 'hidden'
+  /** Keep this node outside activity groups and whole-Turn process folding. Omission uses normal grouping. */
+  readonly processPlacement?: 'independent'
 }
 
 /** Merge-extensible payload registry keyed by final Chat renderer kind. */

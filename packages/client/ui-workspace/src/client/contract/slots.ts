@@ -54,6 +54,7 @@ import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/cli
 import type { WorkspaceShortcutState } from '../shortcuts.ts'
 import type { StartSessionOptions } from '../navigation.ts'
 import type { createWorkspaceViewStore } from '../stores.ts'
+import type { WorkspaceSessionGroup } from '../session-groups.ts'
 
 /**
  * Owner share of the directory-flow holes: the complete conversation between
@@ -224,6 +225,7 @@ export type WorkspaceBrowserInjected = {
     hostInfo: HostObservable<RemoteHostFacts>
     workspaceShortcuts: HostObservable<WorkspaceShortcutState>
     shortcuts: HostObservable<readonly ShortcutCatalogEntry[]>
+    sessionGroups: HostObservable<readonly WorkspaceSessionGroup[]>
   }
   /** Open the browser search and focus its input. */
   requestSearch: () => void

@@ -39,6 +39,9 @@ describe('desktop package target', () => {
     expect(parseDesktopPackageInvocation([], 'darwin', 'arm64').target.name).toBe('mac-arm64')
     expect(parseDesktopPackageInvocation(['--prepare-only'], 'darwin', 'arm64').prepareOnly).toBe(true)
     expect(parseDesktopPackageInvocation(['--check'], 'darwin', 'arm64').check).toBe(true)
+    expect(parseDesktopPackageInvocation(['win-x64', '--unsigned', '--product', 'product.json'], 'win32', 'x64').productConfig).toMatch(/product\.json$/u)
+    expect(() => parseDesktopPackageInvocation(['win-x64', '--product', 'product.json'], 'win32', 'x64')).toThrow(/--unsigned/u)
+    expect(() => parseDesktopPackageInvocation(['mac-arm64', '--unsigned', '--product', 'product.json'], 'darwin', 'arm64')).toThrow(/win-x64/u)
     expect(parseDesktopPackageInvocation(['win-x64', '--check', '--unsigned'], 'win32', 'x64')).toMatchObject({ check: true, unsigned: true })
     expect(() => parseDesktopPackageInvocation(['mac-arm64', 'mac-x64'], 'darwin', 'arm64'))
       .toThrow(/at most one target/u)
@@ -56,6 +59,14 @@ describe('desktop package target', () => {
     expect(parseDesktopPackageInvocation(['--', '--check'], 'darwin', 'arm64').check).toBe(true)
     expect(() => parseDesktopPackageInvocation(['mac-arm64', '--build-version', '  '], 'darwin', 'arm64'))
       .toThrow(/--build-version requires a value/u)
+  })
+
+  it('accepts standalone only for an explicit unsigned Windows product', () => {
+    expect(parseDesktopPackageInvocation(['win-x64', '--unsigned', '--product', 'product.json', '--standalone'], 'win32', 'x64'))
+      .toMatchObject({ standalone: true, unsigned: true })
+    expect(() => parseDesktopPackageInvocation(['win-x64', '--standalone'], 'win32', 'x64')).toThrow(/--unsigned --product/u)
+    expect(() => parseDesktopPackageInvocation(['win-x64', '--unsigned', '--standalone'], 'win32', 'x64')).toThrow(/--unsigned --product/u)
+    expect(() => parseDesktopPackageInvocation(['mac-x64', '--unsigned', '--standalone'], 'darwin', 'x64')).toThrow(/win-x64/u)
   })
 
   it('keeps electron-builder publishing disabled for the separate validated upload', () => {

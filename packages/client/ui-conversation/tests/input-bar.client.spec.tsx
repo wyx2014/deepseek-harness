@@ -29,7 +29,7 @@ import type { SubmitOutcome } from '../src/client/contract/input.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
 import { $replaceDetectSpanWithText, $selectDetectSpan } from '../src/client/input/editor/span-map.ts'
 import type {
-  ComposerAttachment, ComposerAttachmentsOwnerProps, DraftFileUploads, InputActivityOwnerProps,
+  ComposerAttachment, ComposerAttachmentsOwnerProps, DraftFileUploads, InputActivityOwnerProps, InputSelectionOwnerProps,
 } from '../src/client/contract/slots.ts'
 import type { DraftAttachmentId } from '../src/client/contract/input.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
@@ -98,6 +98,7 @@ interface BenchOptions {
   accessory?: React.ReactNode
   overlay?: React.ReactNode
   leftItems?: React.ReactNode
+  selection?: (owner: InputSelectionOwnerProps) => React.ReactNode
   rightItems?: React.ReactNode
   activityEntry?: (owner: InputActivityOwnerProps) => React.ReactNode
   contextPressure?: ContextPressureProjection
@@ -167,6 +168,7 @@ function bench(over?: BenchOptions) {
     slotCalls.push({ key, owner })
     if (key === 'conversation.input.overlay') return over?.overlay ?? null
     if (key === 'conversation.input.left') return over?.leftItems ?? null
+    if (key === 'conversation.input.selection') return over?.selection?.(owner as InputSelectionOwnerProps) ?? null
     if (key === 'conversation.input.right') return over?.rightItems ?? null
     if (key === 'conversation.composer.dock') return over?.footer ?? null
     if (key === 'conversation.input.plan') return over?.planEntry ?? null
@@ -282,6 +284,29 @@ function editableOf(input: HTMLElement): boolean {
 function writeDraft(shell: SessionInputShell, text: string): void {
   act(() => { shell.setDraft(text) })
 }
+
+describe('composer selection seat', () => {
+  it('places selection notices above the editor and restores the draft focus after a selection action', () => {
+    const commands = vi.fn()
+    const { view, textarea, shell, props } = bench({
+      toggleCommandMenu: commands,
+      permissionEntry: <button>Workspace edits</button>,
+      selection: owner => <button disabled={owner.locked} onClick={owner.focusEditor}>Selected skill</button>,
+    })
+    writeDraft(shell, 'Draft stays intact')
+    expect(view.container.querySelector('[data-composer-card]')?.contains(view.getByText('Selected skill'))).toBe(true)
+    const selection = view.container.querySelector('[data-composer-selection]')!
+    expect(selection.nextElementSibling?.contains(textarea)).toBe(true)
+    expect(selection.parentElement?.hasAttribute('data-composer-card')).toBe(true)
+    fireEvent.click(view.getByRole('button', { name: '添加文件或调用指令' }))
+    expect(commands).toHaveBeenCalledOnce()
+    fireEvent.click(view.getByRole('button', { name: 'Selected skill' }))
+    expect(document.activeElement).toBe(textarea)
+    expect(shell.state.getSnapshot().draft).toBe('Draft stays intact')
+    view.rerender(<InputBar {...props} disabled />)
+    expect(view.getByRole('button', { name: 'Selected skill' }).hasAttribute('disabled')).toBe(true)
+  })
+})
 
 describe('composer focus handoff', () => {
   it.each(['hero', 'composer'] as const)('focuses the %s editor when its card background is pressed', (variant) => {
@@ -1809,7 +1834,7 @@ describe('command launcher chrome and control seats', () => {
     // Every seat dispatched, nothing rendered (render passes may repeat; the
     // seat set is the contract).
     expect([...new Set(slotCalls.map(c => c.key))]).toEqual([
-      'conversation.input.overlay', 'conversation.input.attachments',
+      'conversation.input.overlay', 'conversation.input.attachments', 'conversation.input.selection',
       'conversation.input.permission', 'conversation.input.plan', 'conversation.input.left',
       'conversation.input.right', 'conversation.input.model', 'conversation.input.activity',
       'conversation.composer.dock',

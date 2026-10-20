@@ -69,18 +69,22 @@ export function builtinRowFace(
  * order; each row carries its section heading.
  * @param rows - the visible candidates in catalog-then-contribution order.
  * @param t - the `command` namespace translator.
+ * @param additions - contributed names appended to the Add section.
  * @returns the sectioned rows.
  */
-export function sectionRows(rows: readonly InputTriggerCandidate[], t: TranslateNS<'command'>): readonly InputTriggerCandidate[] {
-  const listed = new Set([...SECTION_ROWS.add, ...SECTION_ROWS.commands])
+export function sectionRows(
+  rows: readonly InputTriggerCandidate[], t: TranslateNS<'command'>, additions: readonly string[] = [],
+): readonly InputTriggerCandidate[] {
+  const addNames = [...new Set([...SECTION_ROWS.add, ...additions])]
+  const listed = new Set([...addNames, ...SECTION_ROWS.commands])
   const byName = new Map(rows.map(row => [row.name, row]))
   const pick = (names: readonly string[]): InputTriggerCandidate[] =>
     names.flatMap((name) => {
       const row = byName.get(name)
       return row === undefined ? [] : [row]
     })
-  const add = pick(SECTION_ROWS.add).map(row => ({ ...row, section: t('section.add') }))
-  const commands = [...pick(SECTION_ROWS.commands), ...rows.filter(row => !listed.has(row.name))]
+  const add = pick(addNames).map(row => ({ ...row, section: t('section.add') }))
+  const commands = [...pick(SECTION_ROWS.commands.filter(name => !addNames.includes(name))), ...rows.filter(row => !listed.has(row.name))]
     .map(row => ({ ...row, section: t('section.commands') }))
   return [...add, ...commands]
 }

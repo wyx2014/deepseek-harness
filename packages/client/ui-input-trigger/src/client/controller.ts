@@ -13,6 +13,7 @@ import type {
   ArbitrateKey, ArbitrateOutcome, PickOutcome, ReferenceInsert,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
 import { detectTrigger } from '../core/detect.ts'
 import { MENU_CLOSED, menuReduce, seedGroups } from '../core/menu.ts'
 import type { MenuEvent, MenuState, TriggerHit } from '../core/contract.ts'
@@ -86,6 +87,9 @@ export class InputTriggerController {
    */
   readonly lexicon: SnapshotStore<ReadonlyMap<TriggerChar, readonly string[]>> =
     createSnapshotStore<ReadonlyMap<TriggerChar, readonly string[]>>(new Map())
+
+  /** Catalog-backed sent-text mentions, published through the source's lexicon invalidation channel. */
+  readonly textReferences: SnapshotStore<readonly UserTextReference[]> = createSnapshotStore<readonly UserTextReference[]>([])
 
   /** The authoritative hit: single truth for span CAS material (menu snapshot never carries it alone). */
   private hit: TriggerHit | null = null
@@ -474,15 +478,17 @@ export class InputTriggerController {
     return actx.bail(actx, 'slash/input-insert-reference', { reference: outcome.insert, span }) === true
   }
 
-  /** Re-poll every lexicon-bearing source and publish the aggregated rolls (see the store doc). */
+  /** Publish draft lexicons and sent-text references from each source's current catalog. */
   private refreshLexicon(): void {
     const projection = this.project()
     const rolls = new Map<TriggerChar, readonly string[]>()
+    const references: UserTextReference[] = []
     for (const src of this.deps.roster.all()) {
-      if (src.lexicon === undefined) continue
+      if (src.lexicon === undefined && src.textReferences === undefined) continue
       let names: readonly string[] | undefined
       try {
-        names = src.lexicon(projection)
+        names = src.lexicon?.(projection)
+        references.push(...src.textReferences?.(projection) ?? [])
       } catch (error) {
         // A faulty source drops silently with a console record (the
         // candidate-fetch failure policy); the refresh runs inside
@@ -495,11 +501,16 @@ export class InputTriggerController {
       rolls.set(src.trigger, prev === undefined ? names : [...prev, ...names])
     }
     this.lexicon.set(rolls)
+    const previous = this.textReferences.getSnapshot()
+    if (references.length !== previous.length || references.some((ref, index) => {
+      const old = previous[index]
+      return ref.text !== old?.text || ref.kind !== old.kind || ref.name !== old.name || ref.path !== old.path
+    })) this.textReferences.set(references)
   }
 
-  /** Wire one source's lexicon invalidation channel into refresh (hookless or roll-less sources never notify). */
+  /** Observe changes to a source's draft lexicon or sent-text reference catalog. */
   private watchLexicon(source: InputTriggerSource, projection: ClientSessionContext): void {
-    if (source.lexicon === undefined || source.subscribeLexicon === undefined) return
+    if ((source.lexicon === undefined && source.textReferences === undefined) || source.subscribeLexicon === undefined) return
     this.lexiconOffs.set(source, source.subscribeLexicon(projection, () => {
       this.refreshLexicon()
       const hit = this.hit

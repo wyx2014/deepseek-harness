@@ -187,6 +187,51 @@ async function mintAgentScope(ctx: Context, subject: string | Agent): Promise<{ 
 }
 
 describe('dsh-tool-skill', () => {
+  it('withdraws a managed skill from durable catalogs and denies direct loading', async () => {
+    const home = await tempDir('managed-policy')
+    const ctx = await setup(home)
+    try {
+      ctx.skills.register({ name: 'managed', description: 'Managed instructions', source: 'runtime', content: 'Private skill body.' })
+      const agent = agentForCwd(home)
+      await composePrefixForAgent(ctx, agent)
+      let allowed = true
+      let invalidate = () => {}
+      ctx.skills.registerPolicy((control) => { invalidate = control.invalidate; return { allows: () => allowed } })
+      allowed = false
+      invalidate()
+      await composePrefixForAgent(ctx, agent)
+      const denied = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('managed-denied'), name: 'skill', arguments: { name: 'managed' } })
+      expect(denied.isError).toBe(true)
+      expect(denied.content).toMatchInlineSnapshot(`
+        [
+          {
+            "text": "Error: skill "managed" is unknown or no longer available",
+            "type": "text",
+          },
+        ]
+      `)
+      const catalogs = catalogMessages(agent.session)
+      expect(catalogs).toHaveLength(2)
+      expect(catalogs[1]?.data.content).toMatchInlineSnapshot(`
+        [
+          {
+            "text": "<system-reminder>
+        The available skill catalog changed. This complete catalog replaces every earlier available-skills list in this session:
+
+        <available_skills>
+        </available_skills>
+
+        No skills are currently available through the \`skill\` tool. Do not use names from earlier skill catalogs.
+        A user may still invoke a skill directly; its <skill_content> block then appears in this conversation. Follow it, and do not call the \`skill\` tool for it.
+        </system-reminder>",
+            "type": "text",
+          },
+        ]
+      `)
+      expect(await ctx.skills.get('managed')).toBeUndefined()
+    } finally { await ctx.fiber.dispose() }
+  })
+
   it('registers the skill tool schema and removes it on dispose', async () => {
     const ctx = new Context()
     provideWorkingDirectoryFixture(ctx)

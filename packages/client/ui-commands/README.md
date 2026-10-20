@@ -33,6 +33,8 @@ A contribution is a client-owned command; a host-name collision fails loudly. It
 
 A popupSelect spec may supply `searchLabels()` to resolve its placeholder, empty-catalog text, and no-match text for each opening. Omitted labels retain the shell's generic copy; labels from one popup never carry into the next.
 
+A contribution may set `section: 'add'` to join the native Add section. Popup options may set `disabled: true` to remain visible while pointer and keyboard selection skip them; command owners recheck live availability when applying a choice.
+
 Options may carry `group: { name, label }`: `name` identifies the group and `label` supplies its localized sticky heading. Equal names share one group; groups retain first-occurrence order in the loaded options, including when a query hides earlier rows. Ungrouped options form one headingless block at their first occurrence. Groups without matching rows are hidden.
 
 The optional `searchMode` defaults to `'substring'`, matching `label` and `detail` case-insensitively without ranking. `'fuzzy-label'` matches only labels as ordered, case-insensitive subsequences and ranks within each group: prefixes first, then alignment score, then original row order. Both modes ignore leading and trailing query spaces; a blank query keeps every row in group order. Rendering, keyboard navigation, and selection use the same filtered order. `/model` opts into `'fuzzy-label'`; other commands retain substring matching unless they opt in.

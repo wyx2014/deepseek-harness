@@ -26,6 +26,7 @@ import {
 import { capture } from '../../../scripts/release/process.ts'
 import { tarballFiles } from '../../../scripts/release/tarball.ts'
 import { resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { DESKTOP_PRODUCT_FILE, readDesktopProduct } from '../src/product.ts'
 
 const DSH_PACKAGE = '@deepseek-ai/dsh'
 const ROOT_PACKAGES = [DSH_PACKAGE, DESKTOP_HOST_PACKAGE] as const
@@ -54,10 +55,12 @@ function dependencyNames(manifest: Readonly<Record<string, unknown>>, section: s
  * Select workspace dependencies rooted at dsh and its private Host; npm resolves external packages.
  * Reads the repository workspace manifest and package manifests to distinguish required local packages from npm-resolved externals.
  * @param available - Packed packages indexed by package name.
+ * @param productBundles - Additional locally packed bundles selected by the product.
  * @returns Selected packages sorted by name.
  */
 export function selectDesktopPackageClosure(
   available: ReadonlyMap<string, PackedDesktopPackage>,
+  productBundles: readonly string[] = [],
 ): PackedDesktopPackage[] {
   const workspace = yaml.load(readFileSync(join(REPOSITORY_ROOT, 'pnpm-workspace.yaml'), 'utf8')) as { packages: string[] }
   const workspaceNames = new Set(globSync(workspace.packages.map(pattern => `${pattern}/package.json`), { cwd: REPOSITORY_ROOT })
@@ -80,7 +83,7 @@ export function selectDesktopPackageClosure(
       if (available.has(dependency)) visit(dependency)
     }
   }
-  for (const name of ROOT_PACKAGES) {
+  for (const name of [...ROOT_PACKAGES, ...productBundles]) {
     if (!available.has(name)) throw new Error(`desktop package set: packed inputs omit ${name}`)
     visit(name)
   }
@@ -127,9 +130,14 @@ export function assertDesktopHostPackageFiles(files: readonly string[]): void {
   }
 }
 
-/** Prepare a package set from release tarball directories. */
-export function prepareDesktopPackageSet(inputs: readonly string[], output: string): void {
-  const selected = selectDesktopPackageClosure(packedPackages(inputs))
+/**
+ * Copy the base and product tarball closures with integrity records and relocatable bundle defaults.
+ * @param inputs - Directories containing packed release and product packages.
+ * @param output - Disposable package-set directory, replaced after input validation.
+ * @param productBundles - Ordered additional bundles required from the packed inputs.
+ */
+export function prepareDesktopPackageSet(inputs: readonly string[], output: string, productBundles: readonly string[] = []): void {
+  const selected = selectDesktopPackageClosure(packedPackages(inputs), productBundles)
   const host = selected.find(packed => packed.manifest.name === DESKTOP_HOST_PACKAGE)
   if (host === undefined) throw new Error(`desktop package set: selected closure omits ${DESKTOP_HOST_PACKAGE}`)
   assertDesktopHostPackageFiles(tarballFiles(host.tarball))
@@ -156,14 +164,21 @@ export function prepareDesktopPackageSet(inputs: readonly string[], output: stri
   })
   const packageSet = parseDesktopCorePackageSet({ schemaVersion: 1, packages: records })
   writeFileSync(join(output, DESKTOP_PACKAGE_SET_FILE), `${JSON.stringify(packageSet, undefined, 2)}\n`, { mode: 0o600 })
+  if (productBundles.length > 0) {
+    writeFileSync(join(output, DESKTOP_PRODUCT_FILE), `${JSON.stringify({ schemaVersion: 1, bundles: productBundles }, null, 2)}\n`)
+  }
 }
 
 function main(): void {
   const buildPaths = resolveDesktopTargetBuildPaths()
+  const product = process.env.DSH_DESKTOP_PRODUCT_CONFIG === undefined
+    ? undefined
+    : readDesktopProduct(process.env.DSH_DESKTOP_PRODUCT_CONFIG)
   const defaultInputs = [
     buildPaths.packedDsh,
     buildPaths.packedVendor,
     buildPaths.packedLandlock,
+    ...(product === undefined ? [] : [product.packages]),
   ]
   const { values } = parseArgs({
     options: { from: { type: 'string', multiple: true }, out: { type: 'string' } },
@@ -171,7 +186,7 @@ function main(): void {
   })
   const inputs = (values.from ?? defaultInputs).map(path => resolve(REPOSITORY_ROOT, path))
   const output = values.out === undefined ? buildPaths.packageSet : resolve(REPOSITORY_ROOT, values.out)
-  prepareDesktopPackageSet(inputs, output)
+  prepareDesktopPackageSet(inputs, output, product?.bundles)
   console.log(`desktop package set: prepared ${output}`)
 }
 

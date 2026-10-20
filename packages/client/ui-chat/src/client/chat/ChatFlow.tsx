@@ -14,7 +14,7 @@ export const ChatFlow = memo(function ChatFlow({
   entries, pendingInputs, lastInputTurn, deferCollapse,
   useSession, useChat, useChatNode, useChatNodeBottom, useChatNodeProcess, useChatGroup, usePresentation,
   useStore, actions, renderSlot, t, useGroupAction, useGroupHeaderAction,
-  cwd, openFile, openSkill, inspectCall, forkAt, loadImage, fileMentions,
+  cwd, openFile, openSkill, inspectCall, forkAt, loadImage, fileMentions, textReferences,
 }: ChatFlowSlotProps) {
   const nodeStore = useChat(snapshot => snapshot.nodes)
   const running = useSession(snapshot => snapshot.running)
@@ -32,7 +32,7 @@ export const ChatFlow = memo(function ChatFlow({
   const seatProps = {
     nodeStore, useChatNode, useChatNodeBottom, useChatNodeProcess, usePresentation,
     useStore, actions, renderSlot, t, useGroupAction, deferCollapse,
-    cwd, openFile, openSkill, inspectCall, forkAt, loadImage, renderMessageImages, fileMentions,
+    cwd, openFile, openSkill, inspectCall, forkAt, loadImage, renderMessageImages, fileMentions, textReferences,
   }
   const rows = entries.map((entry) => {
     switch (entry.kind) {
@@ -48,19 +48,21 @@ export const ChatFlow = memo(function ChatFlow({
   })
   const pendingRows = pendingInputs.map(item => 'requestId' in item ? (
     <PendingSubmissionBubble key={item.requestId} submission={item}
-      renderMessageImages={renderMessageImages} t={t} />
+      renderMessageImages={renderMessageImages} references={{ openFile, openSkill }} textReferences={textReferences} t={t} />
   ) : (
     <PendingSteeringBubble key={item.id} content={item.content}
-      renderMessageImages={renderMessageImages} t={t} />
+      renderMessageImages={renderMessageImages} references={{ openFile, openSkill }} textReferences={textReferences} t={t} />
   ))
-  const tail = entries.at(-1)
-  const node = tail?.kind === 'node' ? nodeStore.get(tail.key) : undefined
-  // An empty opening control follows one local transcript echo, never steering.
-  // All rows share this keyed list so inserting the control keeps the echo mounted.
-  if (node?.kind === 'turn-process' && node.location.kind === 'turn'
-    && node.location.turn.status === 'open' && node.location.turn.turn !== lastInputTurn) {
+  // Pre-step extensions may publish work after the opening control before the input is durable.
+  // Keep one local opening echo ahead of that control and its work; steering stays at the tail.
+  const openingIndex = entries.findLastIndex((entry) => {
+    const node = entry.kind === 'node' ? nodeStore.get(entry.key) : undefined
+    return node?.kind === 'turn-process' && node.location.kind === 'turn'
+      && node.location.turn.status === 'open' && node.location.turn.turn !== lastInputTurn
+  })
+  if (openingIndex !== -1) {
     const index = pendingInputs.findIndex(item => 'requestId' in item && item.placement === 'transcript')
-    if (index !== -1) rows.splice(rows.length - 1, 0, ...pendingRows.splice(index, 1))
+    if (index !== -1) rows.splice(openingIndex, 0, ...pendingRows.splice(index, 1))
   }
   return [...rows, ...pendingRows, ...running ? [<RunningStatus key="running" startTime={runningStartTime} t={t} />] : []]
 })

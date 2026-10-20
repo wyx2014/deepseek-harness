@@ -22,6 +22,7 @@ import {
 import type { DesktopPaths } from './paths.ts'
 import type { DesktopRelease } from './release.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
+import { readDesktopProductBundles } from './product.ts'
 import {
   initProfile, PROFILE_TEMPLATES, removeLinkProjections, sanitizeProfile, type ProfileTemplate,
 } from '@deepseek-ai/dsh-app-boot'
@@ -83,9 +84,10 @@ export class DesktopProjectManager {
   async applyRelease(): Promise<void> {
     await this.withLock(() => {
       // Validation only: an unreadable or mismatched runtime descriptor stops preparation before the Host starts.
-      readDesktopRuntime(this.runtime.dsh)
+      const runtime = readDesktopRuntime(this.runtime.dsh)
+      const productBundles = readDesktopProductBundles(this.runtime.dsh, runtime)
       migrateProfileSettings(this.paths.profile)
-      createPluginProfile(this.paths.profile)
+      createPluginProfile(this.paths.profile, productBundles)
       removeLinkProjections(this.paths.profile)
     })
   }
@@ -139,7 +141,7 @@ export function createRuntimeProjectMetadata(projectDir: string, release: Deskto
     private: true,
     version: '0.0.0',
     dependencies: desktopCorePackageOverrides(packageSet),
-    dsh: { profile: { bundles: [...WEB_PROFILE.bundles] } },
+    dsh: { profile: { bundles: [...new Set([...WEB_PROFILE.bundles, ...readDesktopProductBundles(projectDir)])] } },
   }
   writeJson(join(projectDir, 'package.json'), manifest)
   writeFileSync(
@@ -170,7 +172,11 @@ export function createDevelopmentProjectMetadata(projectDir: string, release: De
   writeFileSync(join(projectDir, 'pnpm-workspace.yaml'), workspaceFile(), { mode: 0o600 })
 }
 
-/** Create the first external plugin profile without running a package manager. */
-export function createPluginProfile(projectDir: string): void {
-  initProfile(projectDir, WEB_PROFILE.bundles)
+/**
+ * Initialize missing profile files without installing packages or replacing user configuration.
+ * @param projectDir - User profile directory.
+ * @param productBundles - Bundles supplied by the installed runtime, after the shared Web defaults.
+ */
+export function createPluginProfile(projectDir: string, productBundles: readonly string[] = []): void {
+  initProfile(projectDir, [...new Set([...WEB_PROFILE.bundles, ...productBundles])])
 }

@@ -192,6 +192,7 @@ export const workflowRunDefinition: ConversationNodeDefinition<WorkflowState> = 
       anchorSeq: context.start.event.seq,
       location: context.start.location,
       visibility: 'visible',
+      processPlacement: 'independent',
       data,
     }
   },

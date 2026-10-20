@@ -319,6 +319,18 @@ describe('candidates', () => {
     expect(names).toEqual(['theme'])
   })
 
+  it('places contributed Add entries beside native actions and removes them on disposal', async () => {
+    const { command, source } = await bench()
+    command.register(themeContribution())
+    const dispose = command.register(themeContribution({ name: 'expert-team', section: 'add' }))
+    const rows = await source.candidates(proj('s1'), req(''))
+    expect(rows.map(row => row.name)).toEqual(['goal', 'plan', 'expert-team', 'theme'])
+    expect(rows.find(row => row.name === 'expert-team')?.section).toBe('command:section.add')
+    expect(rows.find(row => row.name === 'theme')?.section).toBe('command:section.commands')
+    dispose()
+    expect((await source.candidates(proj('s1'), req(''))).some(row => row.name === 'expert-team')).toBe(false)
+  })
+
   it('localizes canonical built-in and contribution descriptions on every candidate request', async () => {
     let locale = 'zh'
     const commands: CommandDescriptor[] = [

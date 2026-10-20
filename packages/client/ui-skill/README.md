@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Type `/` in the composer and pick a skill from the suggestions, or type `/name` directly; the sent message carries the literal text, and the host loads the skill the same way for a menu pick or a hand-typed token. A name shared with a host command still resolves to the command — adjudication claims the line client-side before it ever becomes a prompt.
+Type `/` in the composer and pick a skill from the suggestions to insert a skill icon and name as one atomic reference; Backspace removes the whole reference. Copying or sending it produces the literal `/name`. You can also type `/name` directly as editable text; the host loads the skill the same way. A name shared with a host command still resolves to that command through client-side adjudication.
 
 ### What the source offers
 
@@ -37,7 +37,7 @@ The `preparing` stage shows only the skill icon and title, with no requested ski
 
 A collapsed row renders the skill glyph, `Skill` title, and requested skill name on the same secondary font-size axis, line height, row height, and glyph scaling as ordinary Tool rows. Every lifecycle state retains the ordinary skill glyph; running calls carry one left-to-right highlight across the title, separator, and skill name, while failures replace the name with the first error line and interruptions retain their explicit status text. A settled row expands into a bounded `Instructions` card containing the exact durable tool output, with the standard trajectory `Inspect` affordance when available; this expanded card keeps its own typography. The row derives its name, lifecycle, and body only from the frozen call/result slice supplied by ui-tool, never from the current catalog, so replay stays stable when installed skills or their descriptions change. Text and icons are tertiary at rest and secondary on hover; error and interruption text retains its semantic color.
 
-Hovering over `/name` highlights the entire reference. Clicking a known skill opens its provider-supplied `SKILL.md` path in the right Sidebar while keeping the token editable. An uncached click shares the per-Session catalog fetch and opens when it completes, retaining the clicked Session address. Preset changes, connection resets, and plugin disposal cancel pending previews; a later click fetches the current catalog again. Skills without a file path remain invocable but have no file preview.
+Clicking a known skill reference opens its provider-supplied `SKILL.md` path in the right Sidebar without changing the draft. Hand-typed tokens remain editable. An uncached click shares the per-Session catalog fetch and opens when it completes, retaining the clicked Session address. Preset changes, connection resets, and plugin disposal cancel pending previews; a later click fetches the current catalog again. Skills without a file path remain invocable but have no file preview.
 
 -----
 
@@ -47,11 +47,11 @@ Hovering over `/name` highlights the entire reference. Clicking a known skill op
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The source implements no adjudication hooks and no reference codec: the pick lands literal text and the prompt ships the same literal, so determinism lives host-side ([slash pipeline note](../../../.agents/notes/archived/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md)).
+The source implements no adjudication hooks. A pick inserts a `skill` reference with the shared skill appearance; its codec returns the literal `/name` for both clipboard and model serialization. Skill loading remains host-owned.
 
 ### Candidate flow
 
-Catalogs cache per ordinary session with a single-flight fetch; the scope-birth `warm` hook prewarms the session's entry, the forwarded `agent-preset/selected` owner event drops that one session's entry (the catalog belongs to the preset, and a blank session may switch after the warm), and `connection/reset` clears everything. Catalog-addressed continuable children resolve no skill candidates locally because the existing skill RPC requires an attached session; viewing their persisted history must not activate them. The list RPC rides the plugin's root-context connection captured at registration; draft chip visuals derive from the `lexicon` scan.
+Catalogs cache per ordinary session with a single-flight fetch; the scope-birth `warm` hook prewarms the session's entry, the forwarded `agent-preset/selected` owner event drops that one session's entry (the catalog belongs to the preset, and a blank session may switch after the warm), and `connection/reset` clears everything. Catalog-addressed continuable children resolve no skill candidates locally because the existing skill RPC requires an attached session; viewing their persisted history must not activate them. The list RPC rides the plugin's root-context connection captured at registration; the `lexicon` scan decorates hand-typed tokens.
 
 Each catalog fetch requires an existing retained Client Session and waits for its initial history open to succeed before sending `skills/list`. A temporary `skillCatalog` reference holds that Session until the fetch settles. An unretained Session or a failed open rejects without sending the RPC; preset invalidation, connection reset, and plugin disposal also cancel a pending history wait.
 
@@ -100,7 +100,7 @@ Append-only: the injected message lands after the reusable history prefix. This 
 These limits define where the reference and the row fall back to generic behavior; they are current package constraints.
 
 - **Result-only history pages use the generic row** — keyed dispatch needs the paired call in the runtime window; pagination that leaves the call outside has no tool identity. This client presentation feature does not extend the history wire contract to recover it.
-- **Text is the truth** — the reference is plain draft text; a hand-typed identical token is the same reference, and the host gesture boundary judges the sent text, not the menu interaction. Chip visuals derive from the lexicon scan; no occurrence identity, position tracking, or structured reference payload exists on the prompt wire.
+- **Invocation uses literal prompt text** — menu references and hand-typed tokens both serialize to `/name`; the host gesture boundary judges the sent text. Atomic reference identities and positions remain local to the composer and saved drafts; they do not enter the prompt wire.
 - **A menu opened before the prewarm settles** shows no skill candidates for that keystroke; the next keystroke re-polls the settled cache.
 
 <a id="dev-note"></a>

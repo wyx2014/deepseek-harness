@@ -194,6 +194,22 @@ function viewInstance(slots: SlotRegistry) {
 const settled = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 
 describe('ui-workspace apply', () => {
+  it('publishes virtual group updates and removes their subscriptions with the contributing plugin', async () => {
+    const b = await bench()
+    onTestFinished(() => b.ctx.fiber.dispose())
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const group = createSnapshotStore({ key: 'scheduled', label: '定时任务', sessionIds: [sid('run')] })
+    const contributor = await b.ctx.plugin({ inject: ['uiWorkspace'], apply(ctx: Context) {
+      ctx.uiWorkspace.registerSessionGroup(group)
+    } })
+    expect(b.ctx.uiWorkspace.sessionGroups.getSnapshot()).toEqual([group.getSnapshot()])
+    group.set({ ...group.getSnapshot(), label: 'Scheduled tasks', sessionIds: [sid('next')] })
+    expect(b.ctx.uiWorkspace.sessionGroups.getSnapshot()).toEqual([group.getSnapshot()])
+    await contributor.dispose()
+    expect(b.ctx.uiWorkspace.sessionGroups.getSnapshot()).toEqual([])
+    group.set({ ...group.getSnapshot(), label: 'unloaded' })
+    expect(b.ctx.uiWorkspace.sessionGroups.getSnapshot()).toEqual([])
+  })
   it('keeps the host Loader entry inert', () => {
     expect(hostApply).not.toThrow()
   })

@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`pick inserts a skill reference > uses the shared skill appearance and retains the literal /name on copy and submit 1`] = `
+{
+  "insert": {
+    "appearance": "skill",
+    "clipboardText": "/commit-helper",
+    "label": "commit-helper",
+    "ref": "/commit-helper",
+    "source": "skill",
+  },
+}
+`;

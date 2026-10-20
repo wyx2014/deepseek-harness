@@ -6,8 +6,7 @@
  * real ClientSessionContext projections — sessionId addressing, the
  * session-keyed catalog cache (single-flight per key, scope-birth warm
  * prewarm, connection/reset clear), shared fuzzy name ranking, RPC-failure
- * rejection, pick → plain-text outcome (the plain-text-reference decision:
- * .agents/notes/archived/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md),
+ * rejection, pick → atomic skill reference with literal /name serialization,
  * the synchronous
  * lexicon reads over the settled cache, and the reference codec's two
  * projections. Direct driving is deliberate: this spec owns only the
@@ -415,8 +414,8 @@ describe('lexicon', () => {
   })
 })
 
-describe('pick lands plain text', () => {
-  it('onPick returns the literal /name text with a closing space', async () => {
+describe('pick inserts a skill reference', () => {
+  it('uses the shared skill appearance and retains the literal /name on copy and submit', async () => {
     const { source } = await bench(listOk(CATALOG))
     const outcome = source.onPick({
       candidate: { name: 'commit-helper', description: 'commit flow' },
@@ -426,14 +425,18 @@ describe('pick lands plain text', () => {
       action: 'pick',
       span: { start: 0, end: 4, draftRev: 7 },
     })
-    expect(outcome).toEqual({ text: '/commit-helper ' })
+    expect(outcome).toMatchSnapshot()
+    if (!outcome || typeof outcome === 'string' || !('insert' in outcome)) throw new Error('Expected a skill reference')
+    expect(outcome.insert).toEqual({
+      source: 'skill', ref: '/commit-helper', label: 'commit-helper',
+      appearance: 'skill', clipboardText: '/commit-helper',
+    })
+    expect(source.codec!.clipboardText(outcome.insert.ref)).toBe('/commit-helper')
+    await expect(source.codec!.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe('/commit-helper')
   })
 
-  it('keeps the legacy reference codec removed and stays out of adjudication', async () => {
+  it('leaves hand-typed skill and command adjudication to the host', async () => {
     const { source } = await bench(listOk(CATALOG))
-    // Determinism lives host-side (the pre-step gesture boundary), so the
-    // source neither claims lines nor serializes reference markup.
-    expect(source.codec).toBeUndefined()
     expect(typeof source.matchSpace).toBe('undefined')
     expect(typeof source.matchEnter).toBe('undefined')
   })

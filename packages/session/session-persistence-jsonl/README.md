@@ -49,6 +49,8 @@ Choose this backend when consumers benefit from one artifact per session — nav
 
 Live-event write batching is not configuration: the batching window is the seam's internal scheduling policy inside each write handle.
 
+Explicit whole-Session `delete(id, { expectedRevision })` takes the same process and kernel writer exclusion as write-open, refuses live owners or changed revisions, and durably publishes `session.deleted` before removing every canonical log generation. Historical generations remain immutable during ordinary writes and migrations; only explicit whole-Session deletion removes them. The marker and stable lock remain in the artifact directory, seal identity reuse, and keep partial deletion hidden from listing, search and resume after restart. Failure retains a retryable deletion; retry removes remaining logs and awaits derived-membership cleanup. Existing immutable observations may retain their snapshot, but cannot resume a deleted Session. Unload withdraws deletion admission and waits for owned deletions. This operation removes Session logs, not separately managed attachments or spills.
+
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-session-persistence-jsonl) is the exhaustive source for every accepted field and its JSDoc.
 
 ### On-disk layout

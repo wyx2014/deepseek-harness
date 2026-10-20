@@ -36,6 +36,8 @@ export interface WorkerInit {
 
 /** One `agent()` child request after the guest validates script options. */
 export interface ChildStartRequest {
+  /** Display label shared by workflow progress and the native child catalog. */
+  label?: string
   /** The child's prompt text. */
   prompt: string
   /** The structured-output schema, if the call passed one (already subset-checked). */

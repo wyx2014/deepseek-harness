@@ -30,3 +30,30 @@
   text-decoration: line-through;
   opacity: 0.7;
 }
+
+.chip.capability {
+  align-items: center;
+  gap: 4px;
+  max-width: min(240px, 100%);
+  padding: 0;
+  border-radius: 0;
+  font-weight: 500;
+  vertical-align: top;
+}
+
+.chip.capability:hover {
+  background: transparent;
+  opacity: 0.8;
+}
+
+.capability[data-reference-kind='skill']:not(.invalid) {
+  color: var(--dsw-alias-reference-skill);
+}
+
+.capability[data-reference-kind='mcp']:not(.invalid) {
+  color: var(--dsw-alias-reference-mcp);
+}
+
+.capability[data-reference-kind='team']:not(.invalid) {
+  color: var(--dsw-alias-reference-team);
+}

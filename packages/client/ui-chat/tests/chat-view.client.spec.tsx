@@ -3,6 +3,7 @@
 import type { ProcessGroupData } from '../src/client/contract/process-groups.ts'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { GlobalStandardProps, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
+import type { UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useEffect, useMemo } from 'react'
@@ -410,6 +411,7 @@ function makeHarness(
   const transcriptView = createSnapshotStore<TranscriptViewMode>('compact')
   const collapseTiming = createSnapshotStore<CollapseTiming>('completion')
   const performanceUsage = createSnapshotStore<'compact' | 'detailed'>('detailed')
+  const textReferences = createSnapshotStore<readonly UserTextReference[]>([])
   const t = makeTranslate(zh, commonZh)
   const toolOwners: ToolOwner[] = []
   const usePerformanceUsage = bindSnapshotSelector(performanceUsage)
@@ -479,6 +481,7 @@ function makeHarness(
     useStore: bindSnapshotSelector(chat),
     actions: chat.actions,
     usePresentation: bindSnapshotSelector(derivePresentationPolicy(transcriptView, collapseTiming)),
+    useTextReferences: bindSnapshotSelector(textReferences),
     // The fixture implements the concrete flow dispatch behind the generic slot signature.
     renderSlot: renderSlot as ChatViewSlotProps['renderSlot'],
     SessionProvider: SessionProviderStub,
@@ -519,6 +522,7 @@ function makeHarness(
   return {
     set, setSession: session.set, setChat: chatSource.set, ChatView, props,
     openFile, openSkill, loadOlder, loadThrough, openView,
+    setTextReferences: (references: readonly UserTextReference[]) => { textReferences.set(references) },
     setOutline: (value: unknown) => { outlineValue = value },
     chatScroll, forkAt, toolOwners,
     setPerformanceUsage: (mode: 'compact' | 'detailed') => { performanceUsage.set(mode) },
@@ -717,6 +721,23 @@ describe('Chat node rendering', () => {
 })
 
 describe('ChatView', () => {
+  it('refreshes historical capability mentions when the catalog arrives without changing the messages', () => {
+    const h = makeHarness({ nodes: [user(1, '$office-docx @聚源 @notes.md')] })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.queryByRole('button', { name: '/office-docx' })).toBeNull()
+    act(() => { h.setTextReferences([
+      { text: '$office-docx', kind: 'skill', name: 'office-docx' },
+      { text: '@聚源', kind: 'mcp', name: '聚源' },
+    ]) })
+    fireEvent.click(view.getByRole('button', { name: '/office-docx' }))
+    expect(h.openSkill).toHaveBeenCalledWith('office-docx')
+    const connector = view.container.querySelector('[data-ref-chip="mcp"]')!
+    expect(connector.tagName).toBe('SPAN')
+    fireEvent.click(connector)
+    expect(h.openFile).not.toHaveBeenCalled()
+    fireEvent.click(view.getByRole('button', { name: 'notes.md' }))
+    expect(h.openFile).toHaveBeenCalledWith('notes.md')
+  })
   it('renders only referenced Nodes without deleting unreferenced Node data', () => {
     const snapshot = chatSnapshotFixture({ nodes: [user(1, 'included'), user(2, 'omitted')] })
     const h = makeHarness({}, {}, snapshot)
@@ -4313,4 +4334,50 @@ describe('ChatView', () => {
     act(() => { h.setSession({ running: false }) })
     expect(column.querySelector('[data-chat-running]')).toBeNull()
   })
+})
+
+it.each(['compact', 'standard', 'detailed'] as const)('keeps an independent extension visible when a completed Turn folds in %s', (mode) => {
+  const source = chatSnapshotFixture({
+    nodes: [userInTurn(1, 'question', 1), assistant(2, 'progress', 1, 1), assistant(4, 'final answer', 1, 2)],
+    turnEnds: new Map([[1, 5]]),
+  })
+  const card = { ...source.nodes.values().find(node => node.kind === 'assistant-step')!,
+    key: 'extension', id: 'extension', kind: 'extension', processPlacement: 'independent' as const, data: { status: 'completed' } }
+  const builder = new ChatSnapshotBuilder()
+  const snapshot = builder.replace({ nodes: [...source.nodes.values(), card], timeline: source.timeline })
+  const state = new ProcessState()
+  const groups = new ConversationGroupStore<ProcessGroupData>()
+  const input = builder.groupInput()
+  state.accept(input)
+  groups.prepareAndInstall(state.output()!, input.readNode)
+  builder.publish(); groups.publish()
+  const h = makeHarness({ chat: snapshot })
+  h.setGrouped(groups)
+  h.setTranscriptView(mode)
+  const view = render(<h.ChatView {...h.props} />)
+  const row = view.container.querySelector('[data-chat-node-key="extension"]')!
+  expect(row).not.toBeNull()
+  expect(row.closest('[hidden]')).toBeNull()
+  expect(row.hasAttribute('data-turn-process-member')).toBe(false)
+  expect(row.closest('[data-chat-group-key]')).toBeNull()
+  expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('false')
+})
+
+it('keeps the opening input above an independent workflow published during pre-step', () => {
+  const source = chatSnapshotFixture({ turnTimings: new Map([[1, { startTime: 1_000 }]]) })
+  const turn = source.timeline.turns.get(1)!
+  const builder = new ChatSnapshotBuilder()
+  const snapshot = builder.replace({ nodes: [...source.nodes.values(), {
+    key: 'opening-workflow', id: 'workflow', kind: 'extension', target: 'chat', anchorSeq: 2,
+    location: { kind: 'turn', turn }, visibility: 'visible', processPlacement: 'independent', data: {},
+  }], timeline: source.timeline })
+  builder.publish()
+  const h = makeHarness({ chat: snapshot }, { pendingSubmissions: [{
+    requestId: 'opening' as never, placement: 'transcript', time: 1_000, text: 'research request', attachments: [],
+  }] })
+  const view = render(<h.ChatView {...h.props} />)
+  const echo = view.getByText('research request').closest('[data-submission-echo]')!
+  const card = view.container.querySelector('[data-chat-node-key="opening-workflow"]')!
+  expect(card).not.toBeNull()
+  expect(echo.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 })

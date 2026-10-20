@@ -27,6 +27,8 @@ Use `dsh-client-ui-workflow-run` to inspect each durable top-level workflow run 
 
 A top-level workflow run through `dsh-tool-workflow` appears in the conversation as its own node: expand the run to see its phases, and expand a phase to see its members. Phase groups come only from members that started, and settlement changes status without removing or reordering members.
 
+Workflow nodes remain visible outside both activity-group and whole-Turn process folding. The workflow retains its own run and phase disclosures.
+
 ### Navigating the node
 
 Run and phase headers keep 6px gaps between their title, count, and status fields, with the status aligned to the right. The run uses a 32-pixel row with persistent chevrons, an inline state dot, and status text; phases use disclosure rows with title and member count in the main area and a fixed aggregate-status tail; members use a 16-pixel dot slot, a truncating name area, and a fixed status column. Opening a member's child Session requires both member and child to be running, with the current Session recorded as its parent and an available child identity projection. Navigation uses the child's own mode for both continuable and historical one-shot children; external executions have no local Session to open. Child activity uses the unified UI status, falling back to the Session summary when unknown. Workflow events establish membership; missing child identity, a different parent, or a terminal member keeps the row non-interactive.

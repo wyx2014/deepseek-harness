@@ -39,6 +39,8 @@ Chat 在节点列表外通过一个 `MarkdownDelegateProvider` 提供文件及 H
 
 设置 → 通用设置 → 网页链接默认打开方式控制普通点击 Chat HTTP(S) 链接时的目标：「应用内侧边栏」（默认）打开新的右侧 Sidebar Browser tab，「默认浏览器」打开外部标签页。该设置项位于快捷键之后，仅在 Sidebar Browser 可用时显示。若 Sidebar Browser 未注册，两种选择均使用外部浏览器；带修饰键的点击保留原生行为。`ui-chat.linkOpening` 偏好在回环地址浏览器中持久化，设置无法持久化写入时仅在当前进程内生效。已发送的文件引用及消息日志确认调用的 skill 也可在右侧栏打开预览。文件路径使用当前查看的 Session；skill 名称由该 Session 当前的输入触发源解析。两者悬停或聚焦时均使用正文文件链接的虚线下划线。会话、目录和命令标签仍只作为引用展示。
 
+已发送的用户消息、本地发送回显及待接收的插入消息从 Session 的输入触发目录读取能力引用。通过添加菜单选择的 `$name` 技能与斜杠入口统一显示为可点击的 `/name`。MCP 和团队引用显示中性的类型标签，不调用文件打开操作。目录更新也会刷新历史消息的展示，而不改写已记录的消息内容。
+
 <a id="system-prompt-row"></a>
 ## Chat 隐藏的行
 
@@ -92,6 +94,8 @@ Chat 末尾为进行中的 Turn 控制行，且该轮尚无可见输入时，第
 ## 分组渲染
 
 Chat 通过 `uiConversation.groups` 注册过程 Group Definition。React 通过稳定的 Group 与 Node 容器渲染混合 `node`/`group` 根序列，组头数据与成员数组分别订阅。已结束组的标题独立于实时详情偏好，只有运行中的标题在该偏好变化时更新。[过程分组业务规则](src/client/conversation-nodes/README.zh.md#process-grouping) 定义切分方式与活动摘要。
+
+功能可以把 `ChatConversationViewNode.processPlacement` 设为 `independent`，使节点独立于活动分组和整轮过程折叠显示；省略时沿用现有分组策略。工作流进度使用该选项，让运行与阶段自身的展开入口保持可见。
 
 `groupPart` 在 Assistant 渲染器中选择推理或回复，不复制 Node 载荷。同一个 callId 的准备、派发与结果阶段由 Tool 节点自己拥有。每个部分有独立的 DOM 锚点用于恢复阅读位置；轮次导航使用原 Node key，落到它的第一个可见部分。展示模式切换以及为完整旧组补入更早成员时，保留组来源、成员父级及 key。原 Node Store 仍是唯一节点数据所有者，替换 Builder 时重新绑定按键订阅，不重挂载容器。模式变化保留尺寸观察器，并复用整轮状态选择器。
 

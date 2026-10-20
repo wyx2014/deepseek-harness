@@ -118,7 +118,7 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
         // With nothing to settle — still loading, failed, or filtered empty —
         // the keystroke stays the browser's, which is how the error strip's
         // retry button remains reachable.
-        if (!ev.shiftKey && (state.status !== 'ready' || rows.length === 0)) return
+        if (!ev.shiftKey && (state.status !== 'ready' || !rows.some(row => !row.disabled))) return
         ev.preventDefault()
         if (ev.shiftKey) popup.dismiss({ focusComposer: true })
         else void popup.select(state.active)
@@ -136,6 +136,7 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
       key={option.id}
       role="option"
       aria-selected={index === state.active}
+      aria-disabled={option.disabled || undefined}
       aria-label={option.badge === undefined ? undefined : `${option.label} ${option.badge}`}
       className={clsx(css.row, index === state.active && css.rowActive)}
       onClick={() => { void popup.select(index) }}

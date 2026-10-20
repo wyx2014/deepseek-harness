@@ -575,3 +575,18 @@ describe('Definition-owned Chat process groups', () => {
     expect(source.getSnapshot()?.data.closed).toBe(true)
   })
 })
+
+it('keeps independently presented extension nodes outside process groups through updates', () => {
+  const card: ChatConversationViewNode = { key: 'extension-card', id: 'run', kind: 'extension-card', target: 'chat',
+    anchorSeq: 3, location: { kind: 'turn', turn }, visibility: 'visible', processPlacement: 'independent', data: {} }
+  const h = harness([tool('before', 2), card, tool('after', 4)])
+  expect(h.store.entries.map(entry => entry.kind)).toEqual(['group', 'node', 'group'])
+  expect(h.store.entries[1]).toMatchObject({ kind: 'node', key: card.key })
+  h.builder.apply({ upserts: [{ ...card, data: { completed: true } }], timeline })
+  h.commit()
+  expect(h.store.entries.map(entry => entry.kind)).toEqual(['group', 'node', 'group'])
+  const { processPlacement: _, ...ordinary } = card
+  h.builder.apply({ upserts: [ordinary], timeline })
+  h.commit()
+  expect(h.store.entries.map(entry => entry.kind)).toEqual(['group'])
+})

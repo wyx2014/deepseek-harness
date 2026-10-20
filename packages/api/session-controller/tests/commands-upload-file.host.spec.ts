@@ -1,3 +1,4 @@
+import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import { createInboxStub } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -123,6 +124,37 @@ function promptRequest(content: Parameters<SessionCommandController['prompt']>[0
 }
 
 describe('Session file uploads', () => {
+  it('Host admission runs after attachment validation, before delivery, retaining receipts on rejection and native retry identity', async () => {
+    const { controller, uploads, agent, followup } = await uploadHarness()
+    const receipt = await uploads.upload(agent, { data: 'AAAA', name: 'notes.pdf' }, new AbortController().signal)
+    const request = promptRequest([{ type: 'file', receiptId: receipt.receiptId }])
+    const rejected = vi.fn(async () => { throw new RemoteError('gateway/bad-request', 'selection stale', {}) })
+    await expect(controller.prompt(request, rejected)).rejects.toMatchObject({ code: 'gateway/bad-request' })
+    expect(followup).not.toHaveBeenCalled()
+    expect(uploads.resolve(agent, receipt.receiptId)).toEqual(receipt.file)
+    const admitted = vi.fn(async (resolved: Agent) => {
+      expect(resolved).toBe(agent)
+      expect(followup).not.toHaveBeenCalled()
+    })
+    followup.mockImplementation((message: UserMessage) => { agent.inbox.append('next-turn', message) })
+    await controller.prompt(request, admitted)
+    await controller.prompt(request, admitted)
+    expect(admitted).toHaveBeenCalledTimes(1)
+    expect(followup).toHaveBeenCalledTimes(1)
+    const claimed = agent.inbox.nextTurn[0]!
+    agent.session.append('agent/inbox/spliced', { target: 'next-turn', start: 0, inserted: [claimed] })
+    agent.inbox.clear()
+    agent.session.append('agent/inbox/spliced', { target: 'next-turn', start: 0, removedCount: 1, inserted: [] })
+    await controller.prompt(request, admitted)
+    expect(admitted).toHaveBeenCalledTimes(1)
+    expect(followup).toHaveBeenCalledTimes(1)
+    expect(followup.mock.calls[0]?.[0]).toMatchObject({ content: [{ type: 'file', attachment: receipt.file }], source: { rpcId: request.requestId } })
+    const invalid = vi.fn()
+    await expect(controller.prompt({ ...request, requestId: 'invalid-host-admission' as SessionRequestId, content: [{ type: 'file', receiptId: 'missing' as FileUploadReceiptId }] }, invalid))
+      .rejects.toMatchObject({ code: 'session/attachment-invalid' })
+    expect(invalid).not.toHaveBeenCalled()
+  })
+
   it('registers an HTTP route bound to the upload service', async () => {
     const { uploadRoute } = await uploadHarness()
     await expect(uploadRoute(new Request('http://host/upload')))

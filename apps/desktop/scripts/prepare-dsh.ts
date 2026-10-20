@@ -33,6 +33,7 @@ import {
 import { desktopTargetPlatform, resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
 import { desktopRuntimeFileExclusion } from './runtime-file-policy.ts'
 import { selectOfficeEngine } from '../../../scripts/libreoffice-packages.mjs'
+import { DESKTOP_PRODUCT_FILE } from '../src/product.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const BUILD_PATHS = resolveDesktopTargetBuildPaths()
@@ -121,6 +122,9 @@ async function main(): Promise<void> {
     const patches = await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:stage-packages', async () => {
       copyFileSync(join(PACKAGE_SET_ROOT, DESKTOP_PACKAGE_SET_FILE), join(BUILD_ROOT, DESKTOP_PACKAGE_SET_FILE))
       cpSync(join(PACKAGE_SET_ROOT, DESKTOP_PACKAGES_DIR), join(BUILD_ROOT, DESKTOP_PACKAGES_DIR), { recursive: true })
+      if (existsSync(join(PACKAGE_SET_ROOT, DESKTOP_PRODUCT_FILE))) {
+        copyFileSync(join(PACKAGE_SET_ROOT, DESKTOP_PRODUCT_FILE), join(BUILD_ROOT, DESKTOP_PRODUCT_FILE))
+      }
       createRuntimeProjectMetadata(BUILD_ROOT, release)
       return prepareRuntimePatches(BUILD_ROOT, resolve(APP_ROOT, '..', '..'))
     })
@@ -138,6 +142,9 @@ async function main(): Promise<void> {
     const officeManifest = JSON.parse(readFileSync(join(modules, '@deepseek-ai/libreoffice-kit/package.json'), 'utf8'))
     const officeEngine = selectOfficeEngine(officeManifest, target)
     mkdirSync(DSH_OUTPUT_ROOT, { recursive: true })
+    if (existsSync(join(BUILD_ROOT, DESKTOP_PRODUCT_FILE))) {
+      copyFileSync(join(BUILD_ROOT, DESKTOP_PRODUCT_FILE), join(DSH_OUTPUT_ROOT, DESKTOP_PRODUCT_FILE))
+    }
     await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:materialize-modules', async () => {
       cpSync(modules, join(DSH_OUTPUT_ROOT, 'node_modules'), {
         recursive: true, dereference: true,

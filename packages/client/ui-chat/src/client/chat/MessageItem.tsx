@@ -2,6 +2,7 @@ import { Fragment, memo, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
 import { fileExtension, FileTypeIcon, fileSizeText, JsonBlock, projectUserText, StateDot, TextShimmer } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
@@ -161,7 +162,7 @@ function TurnMaxTokensItem({ t }: {
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
   content, renderMessageImages, actions, pending = false, echo = false, referenceLabels = [], skillNames = [],
-  previewAttachments, references, t,
+  previewAttachments, references, textReferences, t,
 }: {
   content: readonly unknown[]
   renderMessageImages: ChatNodeOwnerProps['renderMessageImages']
@@ -178,6 +179,7 @@ function UserStyleBubble({
   /** Local submission-echo attachments replacing the content-derived attachment sequence. */
   previewAttachments?: readonly PresentedAttachment[]
   references?: Pick<ChatNodeOwnerProps, 'openFile' | 'openSkill'>
+  textReferences?: readonly UserTextReference[] | undefined
   t: ChatViewSlotProps['t']
 }): ReactNode {
   const { text, attachments: contentAttachments, rest } = contentParts(content)
@@ -219,7 +221,7 @@ function UserStyleBubble({
           </div>
         )}
         {showBubble && <div className={css.bubble}>
-          {projectUserText(text, referenceLabels, skillNames, 'skill', references)}
+          {projectUserText(text, referenceLabels, skillNames, 'skill', references, textReferences)}
           {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
         </div>}
         {referenceLabels.length > 0 && (
@@ -239,9 +241,11 @@ function UserStyleBubble({
  * @param props - Pending message content and conversation translator.
  * @returns the pending steering bubble.
  */
-export function PendingSteeringBubble({ content, renderMessageImages, t }: {
+export function PendingSteeringBubble({ content, renderMessageImages, references, textReferences, t }: {
   content: readonly unknown[]
   renderMessageImages: ChatNodeOwnerProps['renderMessageImages']
+  references?: Pick<ChatNodeOwnerProps, 'openFile' | 'openSkill'>
+  textReferences?: readonly UserTextReference[] | undefined
   t: ChatViewSlotProps['t']
 }): ReactNode {
   return (
@@ -249,6 +253,8 @@ export function PendingSteeringBubble({ content, renderMessageImages, t }: {
       content={content}
       renderMessageImages={renderMessageImages}
       pending
+      {...references === undefined ? {} : { references }}
+      textReferences={textReferences}
       t={t}
       actions={text => (
         <MessageIconActions
@@ -270,9 +276,11 @@ export function PendingSteeringBubble({ content, renderMessageImages, t }: {
  * @param props - the session snapshot's pending submission and render seats.
  * @returns the echoed user bubble.
  */
-export function PendingSubmissionBubble({ submission, renderMessageImages, t }: {
+export function PendingSubmissionBubble({ submission, renderMessageImages, references, textReferences, t }: {
   submission: PendingSubmission
   renderMessageImages: ChatNodeOwnerProps['renderMessageImages']
+  references?: Pick<ChatNodeOwnerProps, 'openFile' | 'openSkill'>
+  textReferences?: readonly UserTextReference[] | undefined
   t: ChatViewSlotProps['t']
 }): ReactNode {
   const content = useMemo(
@@ -302,6 +310,8 @@ export function PendingSubmissionBubble({ submission, renderMessageImages, t }: 
       renderMessageImages={renderMessageImages}
       pending={submission.placement === 'steering'}
       echo
+      {...references === undefined ? {} : { references }}
+      textReferences={textReferences}
       t={t}
       actions={text => (
         <MessageIconActions
@@ -318,13 +328,14 @@ export function PendingSubmissionBubble({ submission, renderMessageImages, t }: 
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderMessageImages, openFile, openSkill, t,
+  node, renderMessageImages, openFile, openSkill, textReferences, t,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
   return (
     <UserStyleBubble
       content={data.content}
       references={{ openFile, openSkill }}
+      textReferences={textReferences}
       renderMessageImages={renderMessageImages}
       {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
       {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}

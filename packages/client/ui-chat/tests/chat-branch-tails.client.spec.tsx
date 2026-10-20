@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import type { UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type {
@@ -44,10 +45,13 @@ interface MessageItemProps {
   readonly t: ChatNodeViewProps['t']
   readonly referenceLabels?: readonly string[]
   readonly skillNames?: readonly string[]
+  readonly textReferences?: readonly UserTextReference[]
+  readonly openFile?: (path: string) => void
+  readonly openSkill?: (name: string) => void
 }
 
 /** Legacy-node fixture adapter for the independently registered renderers. */
-function MessageItem({ node, t: translate, referenceLabels, skillNames }: MessageItemProps) {
+function MessageItem({ node, t: translate, referenceLabels, skillNames, textReferences, openFile, openSkill }: MessageItemProps) {
   const kind = node.kind === 'assistant' ? 'assistant-step' : node.kind
   const viewNode: ChatConversationViewNode = {
     key: `fixture:${node.kind}:${node.seq}`,
@@ -68,7 +72,8 @@ function MessageItem({ node, t: translate, referenceLabels, skillNames }: Messag
         : node,
   }
   const props = {
-    node: viewNode, t: translate, renderMessageImages, openFile: vi.fn(), openSkill: vi.fn(), useChat: useDetachedChat,
+    node: viewNode, t: translate, renderMessageImages, textReferences,
+    openFile: openFile ?? vi.fn(), openSkill: openSkill ?? vi.fn(), useChat: useDetachedChat,
   } as unknown as ChatNodeViewProps
   switch (node.kind) {
     case 'user':
@@ -88,6 +93,26 @@ function MessageItem({ node, t: translate, referenceLabels, skillNames }: Messag
 }
 
 describe('MessageItem arms', () => {
+  it.each(['user', 'steering'] as const)('opens a catalog-backed skill in a sent %s message and keeps MCP labels inert', (kind) => {
+    const openSkill = vi.fn()
+    const openFile = vi.fn()
+    const view = render(<MessageItem t={t} openSkill={openSkill} openFile={openFile}
+      textReferences={[
+        { text: '$office-docx', kind: 'skill', name: 'office-docx' },
+        { text: '@聚源', kind: 'mcp', name: '聚源' },
+      ]}
+      node={{ kind, seq: 1, time: 1_000, source: null, ...kind === 'steering' ? { messageId: 'm1' } : {},
+        content: [{ type: 'text', text: '$office-docx @聚源 @notes.md' }] } as ConversationNode} />)
+    fireEvent.click(view.getByRole('button', { name: '/office-docx' }))
+    expect(openSkill).toHaveBeenCalledWith('office-docx')
+    const connector = view.container.querySelector('[data-ref-chip="mcp"]')!
+    expect(connector.textContent).toBe('聚源')
+    expect(connector.tagName).toBe('SPAN')
+    fireEvent.click(connector)
+    expect(openFile).not.toHaveBeenCalled()
+    fireEvent.click(view.getByRole('button', { name: 'notes.md' }))
+    expect(openFile).toHaveBeenCalledWith('notes.md')
+  })
   it('renders an adjacent session mention as a chip even without trailing whitespace', () => {
     const view = render(
       <MessageItem

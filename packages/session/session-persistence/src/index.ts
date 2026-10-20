@@ -10,6 +10,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionEvent, SessionHeader, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { SessionHandle, SessionAccess } from './handle.ts'
 import type { SessionPersistenceRevision } from './revision.ts'
+import { SessionDeletionUnsupportedError } from './errors.ts'
 
 // Re-export the metadata vocabulary so Consumers import it from the Service Definition.
 export type { SessionHeader } from '@deepseek-ai/dsh-session'
@@ -25,6 +26,8 @@ export type {
 export {
   SessionAlreadyExistsError,
   SessionAlreadyOwnedError,
+  SessionPersistenceChangedError,
+  SessionDeletionUnsupportedError,
   SessionFormatUnsupportedError,
   SessionHandleClosedError,
   SessionOwnershipLostError,
@@ -108,9 +111,26 @@ export interface SessionPersistenceListOptions {
   readonly signal?: AbortSignal
 }
 
+/** Options for deleting exactly the stored Session revision inspected by a caller. */
+export interface SessionPersistenceDeleteOptions {
+  /** Revision captured before inspecting the log; undefined authorizes only an already absent Session. */
+  readonly expectedRevision: SessionPersistenceRevision | undefined
+  /** Cancellation before deletion commits; committed deletion and projection cleanup are uncancellable. */
+  readonly signal?: AbortSignal
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     sessionPersistence: SessionPersistence
+  }
+  interface Events {
+    /**
+     * Awaited removal of derived membership after durable deletion. Also emitted on an absent retry.
+     * A failure rejects deletion; callers retain their record and retry to finish cleanup.
+     * @mode parallel
+     * @param id - the deleted or already absent Session identity.
+     */
+    'session-persistence/deleted'(id: SessionId): void | Promise<void>
   }
 }
 
@@ -187,8 +207,8 @@ export abstract class SessionPersistence extends Service {
    * against revisions from the same service instance and session id: equal
    * revisions may be treated as an unchanged log; unequal revisions promise
    * nothing. Write-ownership churn does not change a revision. It exists for
-   * derived read-model caches keyed off `stat`/`list`; it plays no part in
-   * open, read, or resume.
+   * derived read-model caches keyed off `stat`/`list` and guards an inspected
+   * deletion; it plays no part in open, read, or resume.
    * @param id - the stored session to observe.
    * @param options - optional cancellation.
    * @returns the snapshot, or `undefined` when the session does not exist.
@@ -201,6 +221,23 @@ export abstract class SessionPersistence extends Service {
    * @returns one snapshot per stored session.
    */
   abstract list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]>
+
+  /**
+   * Delete an inspected stored Session and await derived membership cleanup.
+   * Providers must exclude active writers/resumes, compare the inspected revision under write ownership,
+   * and prevent historical generations from reappearing after interruption. Never dispose an active owner.
+   * The default explicitly refuses unsupported providers. JSONL implements this operation.
+   * @param id - the Session to delete; authorization belongs to the consumer.
+   * @param options - the revision inspected before deletion and optional pre-commit cancellation.
+   * @returns true when deletion committed, false for an already absent Session after cleanup.
+   * @throws {SessionAlreadyOwnedError} while a writer or live Session owns the identity.
+   * @throws {SessionPersistenceChangedError} when a fresh inspection is required.
+   * @throws {SessionDeletionUnsupportedError} on providers without deletion support.
+   */
+  delete(id: SessionId, options: SessionPersistenceDeleteOptions): Promise<boolean> {
+    options.signal?.throwIfAborted()
+    return Promise.reject(new SessionDeletionUnsupportedError(id))
+  }
 }
 
 export default SessionPersistence

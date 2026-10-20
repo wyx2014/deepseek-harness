@@ -362,7 +362,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'startSession(workspaceId?: WorkspaceId, options?: StartSessionOptions): void',
         description: 'Create a fresh Session, or reuse a blank when preparing an explicit draft. A creation the Host refuses is shown through the Workspace notice and leaves the selection as it was.',
-        parameters: [{ name: 'workspaceId', description: 'explicit target; absent inherits the current or most recent Workspace.' }, { name: 'options', description: 'initial content; existing text or attachments are preserved unless clearPreviousDraft is true.' }],
+        parameters: [{ name: 'workspaceId', description: 'explicit target; absent inherits the current or most recent Workspace.' }, { name: 'options', description: 'draft content and reuse policy; reuseBlank false creates an independent draft, and clearPreviousDraft true replaces only the target Session\'s text and references.' }],
       },
       {
         signature: 'archiveSession(sessionId: SessionId, options?: { readonly stopActivity?: boolean }): Promise<void>',
@@ -1001,7 +1001,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'StartSessionOptions',
-    declaration: 'export type StartSessionOptions = DraftInitializationOptions;',
+    declaration: 'export type StartSessionOptions = DraftInitializationOptions & {\n    readonly reuseBlank?: boolean;\n    readonly onPrepared?: (sessionId: SessionId) => void;\n};',
   },
   {
     name: 'StoreDecl',

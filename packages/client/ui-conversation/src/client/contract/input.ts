@@ -175,6 +175,21 @@ export interface InputTarget {
 
 /** Per-session input facade owned by the conversation wiring layer. */
 export interface SessionInput extends InputTarget {
+  /**
+   * Reconcile one owner's persistent inline selection without replacing prose or other references.
+   * Selected references remain in the composer after an ordinary send.
+   * @param source - reference codec owner.
+   * @param references - selected references, inserted at the current caret when absent.
+   * @returns false while a command submission locks editing.
+   */
+  syncReferences(source: string, references: readonly ReferenceInsert[]): boolean
+  /**
+   * Replace one reference in place and merge the change into its preceding undo step.
+   * @param occurrenceId - current editor occurrence identity.
+   * @param reference - new owner, identity and display projections.
+   * @returns false when the occurrence is absent or editing is locked.
+   */
+  replaceReference(occurrenceId: number, reference: ReferenceInsert): boolean
   /** Replace the whole draft with plain text, removing inline reference chips. */
   setDraft(text: string): void
   /** Append ordered browser-owned attachment ids; busy admission phases refuse. */

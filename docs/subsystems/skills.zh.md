@@ -236,6 +236,8 @@ interface Config {
 
 `SkillListRequest` 通过 `sessionId` 指定一个 Session；`SkillListValue` 返回允许用户调用的条目，其中包含名称、描述、可选使用提示与模型调用可用性。`SessionSkillCatalog` 在不激活 Agent 的前提下读取 Session cwd 与记录的 preset。live Agent 可以提供其作用域 registry，冷 Session 则使用 preset 的 standing scope。
 
+管理启停策略在重名裁决后作用于全部执行读取，并在异步加载正文后再次检查。`SkillRegistry.inventory()` 是保留禁用和被遮蔽候选项的管理观测，不授予调用权限。每份 `registerPolicy()` 策略属于调用方作用域，并随作用域卸载；持久化仍由原生设置和提供方资源目录负责。
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -270,6 +272,20 @@ Source: [`packages/api/session-controller/src/skill-catalog.ts`](../../packages/
 Layered registry of skill providers, the host+per-scope shape the tools registry established. A registration files into the layer of its calling context's scope (scopeOf): host rows and repository plugins land in the global layer, while a plugin mounted by an agent preset's standing composition lands in that preset's layer. A read merges the global layer with the viewing scope's chain — the nearest layer's entry wins a duplicate name outright, and the rank order decides duplicates only within one layer. It exposes sorted invocation-neutral summaries and loads full skill bodies on demand.
 
 ```ts cordis-catalog
+/**
+ * Register a management policy in the calling scope. Denials compose across the viewing chain.
+ * @param create - policy factory; invalidate after changing borrowed policy state.
+ * @returns disposer removing this exact policy and invalidating discovery consumers.
+ */
+registerPolicy(create: (control: SkillProviderControl) => SkillEnablePolicy): () => void
+
+/**
+ * Inspect actual provider candidates, including disabled and shadowed installs.
+ * @param options - workspace and viewing scope; policies are evaluated in that same scope.
+ * @returns management candidates and discovery completeness; never use this view to authorize loading.
+ */
+async inventory(options: SkillViewOptions = {}): Promise<{ entries: SkillInventoryEntry[]; complete: boolean }>
+
 /**
  * Register a borrowed same-process provider synchronously during plugin
  * apply, into the calling context's layer: a scoped context (an agent

@@ -2,7 +2,7 @@
 
 import { hostname } from 'node:os'
 import { resolve } from 'node:path'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-fs'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -293,6 +293,19 @@ export class SessionController extends TypertRemoteService {
   }
 
   /**
+   * Read the model captured for this Agent's prompt assembly, or its current
+   * selection before the first assembly. Host pre-step orchestration uses this
+   * snapshot to route children with their parent despite later model changes.
+   * This method is not exposed over Remote.
+   * @param agent - live ordinary Agent managed by Session Controller.
+   * @returns detached provider, model, and optional explicit reasoning effort.
+   */
+  modelSelectionForStep(agent: Agent): ModelSelection {
+    const selection = this.agents.selectionFor(agent)
+    return structuredClone(selection.assembled ?? selection.current)
+  }
+
+  /**
    * Select the first available account model after login when no provider API key is configured.
    * @returns after saving the first available model or retaining the existing default.
    */
@@ -442,6 +455,23 @@ export class SessionController extends TypertRemoteService {
   prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue> {
     signal.throwIfAborted()
     return this.commands.prompt(request)
+  }
+
+  /**
+   * Admit a Host-owned capability selection after native attachment/model validation,
+   * before delivering the unchanged prompt. This method is not exposed over Remote.
+   * @param request - native request, including its original id and upload receipts.
+   * @param beforeDelivery - durable admission on the exact resolved Agent; rejects before inbox mutation.
+   * @param signal - cancellation checked before validation and before Host admission.
+   * @returns the native prompt acknowledgement; request retries keep native deduplication.
+   */
+  promptWithAdmission(request: SessionPromptRequest, beforeDelivery: (agent: import('@deepseek-ai/dsh-agent').Agent) => Promise<void>, signal: AbortSignal): Promise<SessionPromptValue> {
+    signal.throwIfAborted()
+    return this.commands.prompt(request, async (agent) => {
+      signal.throwIfAborted()
+      await beforeDelivery(agent)
+      signal.throwIfAborted()
+    })
   }
 
   /**

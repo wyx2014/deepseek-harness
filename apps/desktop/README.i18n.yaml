@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write apps/desktop/README.md
 /deepseek-harness-desktop:
-  en: 5b8518fd5e0030ef
-  zh: 02efee59c39647dc
+  en: 7752a877f117131a
+  zh: 5a0eb428c3ec5887
 /deepseek-harness-desktop/terminal-command:
   en: bef92953c237363f
   zh: d21d6effd21b8c00
@@ -30,8 +30,8 @@
   en: 84a9cc7ca9455aa8
   zh: 4091b8aa8231b74a
 /deepseek-harness-desktop/develop:
-  en: fe6d23e6a3d3bc66
-  zh: d60c8d3a55747916
+  en: 1de5f18f5a17f860
+  zh: 53416e342a570939
 /deepseek-harness-desktop/develop/startup-onboarding:
   en: a51346b8d880ddba
   zh: 7913214c1c66063c
@@ -57,8 +57,8 @@
   en: f48baa680e841b0d
   zh: 25ded1aeaac6dad1
 /deepseek-harness-desktop/package/unsigned-windows-test-installer:
-  en: fb6de542360dbae7
-  zh: 0e17d7765fb10c48
+  en: 3981de01122ac711
+  zh: 85fc1b1f0d2a4133
 /deepseek-harness-desktop/package/windows-installer-interface:
   en: 1fc1db8f54475c8f
   zh: dd834ed206070396
@@ -75,8 +75,8 @@
   en: 2e57457c44c85b5f
   zh: 5b8510a3dc4c6c9d
 /deepseek-harness-desktop/updates/mandatory-update-policy:
-  en: 54596bef0706d305
-  zh: 48737302dcf3c939
+  en: c5223344f07a5362
+  zh: ba4dc7ca0314f0a8
 /deepseek-harness-desktop/updates/local-updater-qualification:
   en: bc50fd8a4d96c227
   zh: fb0a6ce80c31cda6

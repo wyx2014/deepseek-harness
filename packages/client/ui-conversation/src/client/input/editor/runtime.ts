@@ -2,8 +2,9 @@
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { LexicalEditor, NodeKey } from 'lexical'
 import {
-  $addUpdateTag, $createParagraphNode, $createTextNode, $getRoot, $getSelection, $isRangeSelection,
-  BLUR_COMMAND, CLEAR_HISTORY_COMMAND, COMMAND_PRIORITY_CRITICAL, createEditor, HISTORY_MERGE_TAG, PASTE_TAG,
+  $addUpdateTag, $createParagraphNode, $createTextNode, $getRoot, $getSelection, $isRangeSelection, $isTextNode,
+  BLUR_COMMAND, CLEAR_HISTORY_COMMAND, COMMAND_PRIORITY_CRITICAL, COMMAND_PRIORITY_HIGH, createEditor,
+  HISTORY_MERGE_TAG, KEY_BACKSPACE_COMMAND, PASTE_TAG,
   RootNode, SELECTION_CHANGE_COMMAND, SKIP_DOM_SELECTION_TAG,
 } from 'lexical'
 import { registerPlainText } from '@lexical/plain-text'
@@ -11,7 +12,7 @@ import { createEmptyHistoryState, registerHistory } from '@lexical/history'
 import { mergeRegister } from '@lexical/utils'
 import type { DraftReference, ReferenceInsert } from '../../contract/draft-editor.ts'
 import { registerReferenceActivation } from './reference-activation.ts'
-import { ReferenceChipNode, $createReferenceChipNode } from './chip-node.tsx'
+import { ReferenceChipNode, $createReferenceChipNode, $isReferenceChipNode } from './chip-node.tsx'
 import { refreshClaimDecoration, registerClaimDecoration } from './claim-decor.ts'
 import { registerTextRefDecoration, rescanTextRefs, TextRefNode } from './text-ref.ts'
 import type { EditorProjection } from './projection.ts'
@@ -52,6 +53,8 @@ export class DraftEditorRuntime {
   /** Live lexicon subscription disposer; undefined until the controller resolves. */
   private lexiconOff: (() => void) | undefined
   private lexiconSource: ObservableSnapshot<Lexicon> | undefined
+  private readonly retainedReferenceSources = new Set<string>()
+  private readonly history = createEmptyHistoryState()
 
   /** @param deps - model callbacks used by editor listeners and transforms. */
   constructor(private readonly deps: DraftEditorRuntimeDeps) {
@@ -77,6 +80,20 @@ export class DraftEditorRuntime {
     }
     const unregister = mergeRegister(
       registerPlainText(this.editor),
+      this.editor.registerCommand(KEY_BACKSPACE_COMMAND, (event) => {
+        if (event.isComposing || this.editor.isComposing()) return false
+        const selection = $getSelection()
+        if (!$isRangeSelection(selection) || !selection.isCollapsed() || selection.anchor.type !== 'text' || selection.anchor.offset !== 1) return false
+        const spacer = selection.anchor.getNode()
+        if (!$isTextNode(spacer) || !spacer.getTextContent().startsWith(' ')) return false
+        const reference = spacer.getPreviousSibling()
+        if (!$isReferenceChipNode(reference) || !this.retainedReferenceSources.has(reference.getSource())) return false
+        event.preventDefault()
+        reference.remove()
+        spacer.spliceText(0, 1, '')
+        spacer.select(0, 0)
+        return true
+      }, COMMAND_PRIORITY_HIGH),
       this.editor.registerCommand(BLUR_COMMAND, () => {
         // Finish this batch before an explicit focus can restore its updated selection.
         this.editor.update(preserveExternalSelection, { discrete: true })
@@ -86,7 +103,7 @@ export class DraftEditorRuntime {
       this.editor.registerNodeTransform(RootNode, preserveExternalSelection),
       registerReferenceActivation(this.editor, (source, reference) =>
         this.deps.openReference(source, reference)),
-      registerHistory(this.editor, createEmptyHistoryState(), HISTORY_MERGE_DELAY_MS),
+      registerHistory(this.editor, this.history, HISTORY_MERGE_DELAY_MS),
       this.editor.registerUpdateListener(() => { this.deps.onUpdate() }),
       registerClaimDecoration(this.editor, () => this.deps.activeClaimToken()),
       registerTextRefDecoration(this.editor, () => this.deps.lexicon(), () => this.deps.activeClaimToken()),
@@ -262,6 +279,25 @@ export class DraftEditorRuntime {
   }
 
   /**
+   * Replace one occurrence in place without adding another undo step.
+   * @param occurrenceId - shell-local occurrence identity.
+   * @param reference - replacement reference fields.
+   * @returns whether the occurrence still exists.
+   */
+  replaceReference(occurrenceId: number, reference: ReferenceInsert): boolean {
+    let applied = false
+    this.applyEdit(() => {
+      for (const { node } of $composerLayout().segments) {
+        if (!$isReferenceChipNode(node) || this.occurrenceIdOf(node.getKey()) !== occurrenceId) continue
+        node.replace($createReferenceChipNode(reference))
+        applied = true
+        break
+      }
+    }, HISTORY_MERGE_TAG)
+    return applied
+  }
+
+  /**
    * Insert an ordered file-reference batch after the live selection without deleting it.
    * @param references - validated references in source order.
    * @returns whether the live insertion position accepted the batch.
@@ -280,6 +316,34 @@ export class DraftEditorRuntime {
     return applied
   }
 
+  /**
+   * Reconcile an owner's selected references, retaining existing node positions and undo identities.
+   * @param source - codec owner whose references are reconciled.
+   * @param references - next selection; additions follow the live caret.
+   */
+  syncReferences(source: string, references: readonly ReferenceInsert[]): void {
+    this.retainedReferenceSources.add(source)
+    const expected = new Map(references.map(reference => [reference.ref, reference]))
+    this.applyEdit(() => {
+      for (const segment of $composerLayout().segments) {
+        const node = segment.node
+        if (!$isReferenceChipNode(node) || node.getSource() !== source) continue
+        const next = expected.get(node.getReference())
+        if (next === undefined) {
+          const spacer = node.getNextSibling()
+          if ($isTextNode(spacer) && spacer.getTextContent() === ' ') spacer.remove()
+          node.remove()
+        } else {
+          expected.delete(node.getReference())
+          if (node.getLabel() !== next.label || node.getAppearance() !== next.appearance || node.getTextContent() !== next.clipboardText) {
+            node.replace($createReferenceChipNode(next))
+          }
+        }
+      }
+      if (expected.size > 0) this.insertFileReferences([...expected.values()])
+    })
+  }
+
   /** Refresh claim-token decoration after the model's claim changes. */
   refreshClaimDecoration(): void {
     refreshClaimDecoration(this.editor)
@@ -292,16 +356,31 @@ export class DraftEditorRuntime {
   clearCommittedDraft(prefixLength: (clipboardText: string) => number | null): void {
     this.editor.update(() => {
       const layout = $composerLayout()
+      const retained: ReferenceInsert[] = []
+      for (const segment of layout.segments) {
+        const node = segment.node
+        if (!$isReferenceChipNode(node) || !this.retainedReferenceSources.has(node.getSource())) continue
+        const appearance = node.getAppearance()
+        retained.push({ source: node.getSource(), ref: node.getReference(), label: node.getLabel(),
+          clipboardText: node.getTextContent(), ...(appearance === undefined ? {} : { appearance }) })
+      }
       const length = prefixLength(layout.clipboardText)
       if (length !== null) {
         $replaceDetectSpanWithText(
           { start: 0, end: detectOffsetOfClipboardOffset(layout, length) }, '',
         )
-        return
+      } else {
+        const root = $getRoot()
+        root.clear()
+        root.append($createParagraphNode())
+        root.selectEnd()
       }
-      const root = $getRoot()
-      root.clear()
-      root.selectEnd()
+      const remaining = new Set($composerLayout().segments.flatMap(segment =>
+        $isReferenceChipNode(segment.node) ? [JSON.stringify([segment.node.getSource(), segment.node.getReference()])] : []))
+      const missing = retained.filter(reference => !remaining.has(JSON.stringify([reference.source, reference.ref])))
+      if (missing.length > 0) {
+        $replaceDetectSpanWithNodes({ start: 0, end: 0 }, missing.flatMap(reference => [$createReferenceChipNode(reference), $createTextNode(' ')]))
+      }
     }, { discrete: true, tag: HISTORY_MERGE_TAG })
   }
 
@@ -347,5 +426,7 @@ export class DraftEditorRuntime {
   /** Cut the editor's undo history after a committed clear or restoration. */
   clearHistory(): void {
     this.editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined)
+    // Retained references are the new undo baseline; sent prose must stay outside history.
+    this.history.current = { editor: this.editor, editorState: this.editor.getEditorState() }
   }
 }

@@ -300,6 +300,9 @@ export const InputBar = memo(function InputBar({
     if (editor !== null) focusDraftEditor(editor, revealSelection)
     toggleCommandMenu?.(keyboard.caretSpan())
   }
+  const focusEditor = (): void => {
+    if (editor !== null) focusDraftEditor(editor, revealSelection)
+  }
 
   // The no-session Workspace trigger: the resident editable div acts as the
   // picker trigger for keyboard users (no editor is bound in this state).
@@ -416,6 +419,9 @@ export const InputBar = memo(function InputBar({
             size: imageSizeText(imageLimits.maxImageBytes),
           },
         })}
+        {sessionId !== undefined && <div className={css.selection} data-composer-selection>
+          {renderSlot('conversation.input.selection', { locked: locked || machineBusy, focusEditor })}
+        </div>}
         {/* One scrollport, one text surface: the contenteditable grows with
             its content and .scroll — capped at 14 lines in CSS — is the only
             thing that scrolls. Chips are decorator portals inside the same

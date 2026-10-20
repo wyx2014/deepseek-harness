@@ -245,7 +245,8 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
       })
     }
     const visible = rows.filter(c => req.position === 'leading' || c.hint === undefined)
-    return req.query === '' ? sectionRows(visible, this.t) : rankByName(visible, req.query)
+    const additions = [...this.live.contributions.values()].filter(row => row.section === 'add').map(row => row.name)
+    return req.query === '' ? sectionRows(visible, this.t, additions) : rankByName(visible, req.query)
   }
 
   /** Decision table, menu column: contribution/decorated-host → popup or action; host input → claim; host bare → detached execute. */

@@ -55,6 +55,10 @@ import { readDesktopSettings } from './settings.ts'
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
+import { DesktopBrowserPlugin } from './browser-plugin.ts'
+import { BROWSER_PLUGIN_IPC } from './browser-plugin-protocol.ts'
+import { PROMPT_HUB_IPC } from './prompt-hub-protocol.ts'
+import { createPromptHubHostClient, DesktopPromptHub } from './prompt-hub.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
@@ -401,7 +405,16 @@ async function main(): Promise<void> {
   const applicationUrl = `${SCHEME}://app/`
   let hostUrl: string | undefined
   let hostCookie: string | undefined
-  const browserGuests = new DesktopBrowserGuests(() => hostUrl)
+  const promptHub = new DesktopPromptHub(() => mainWindow,
+    createPromptHubHostClient(() => hostUrl, (url, init) => net.fetch(url, init)),
+    (state) => {
+      if (mainWindow === undefined || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
+      mainWindow.webContents.send(PROMPT_HUB_IPC.changed, state)
+    })
+  const browserPlugin = new DesktopBrowserPlugin(join(app.getAppPath(), 'lib', 'tpcowork-browser', 'desktop.js'), {
+    userData: app.getPath('userData'), window: () => mainWindow, hostUrl: () => hostUrl,
+  })
+  const browserGuests = new DesktopBrowserGuests(() => hostUrl, browserPlugin)
   let injections: readonly unknown[] = []
   let welcomeBackend: DesktopWelcomeBackend | undefined
   let reportedLaunch = false
@@ -446,7 +459,7 @@ async function main(): Promise<void> {
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
-      resources, (next) => { platformView.setSession(next) })
+      resources, (next) => { platformView.setSession(next) }, browserPlugin)
     return {
       start: async () => {
         const ready = await host.start()
@@ -498,6 +511,7 @@ async function main(): Promise<void> {
       },
       stop: async () => {
         analyticsEnabled = false
+        await promptHub.cancel()
         stopAccount?.()
         try { await host.stop(requireCleanStop) }
         catch (error) {
@@ -700,6 +714,16 @@ async function main(): Promise<void> {
     reportFatal(new Error(message), 'web-boot')
   })
 
+  ipcMain.handle(BROWSER_PLUGIN_IPC.request, (event, operation: unknown, payload: unknown) => {
+    assertProductSender(event)
+    return browserPlugin.request(operation, payload)
+  })
+  for (const [channel, operation] of [
+    [PROMPT_HUB_IPC.state, () => promptHub.state()], [PROMPT_HUB_IPC.start, () => promptHub.start()],
+    [PROMPT_HUB_IPC.cancel, () => promptHub.cancel()], [PROMPT_HUB_IPC.signOut, () => promptHub.signOut()],
+  ] as const) {
+    ipcMain.handle(channel, (event) => { assertProductSender(event); return operation() })
+  }
   ipcMain.handle(DESKTOP_IPC.browserAcquire, (event, workspace: unknown) => {
     assertProductSender(event)
     return browserGuests.acquire(event.sender, workspace)
@@ -1167,7 +1191,7 @@ async function main(): Promise<void> {
           if (state?.attempt?.id !== id || state.attempt.phase !== 'waiting-browser' || state.attempt.authorizeUrl === undefined) {
             throw new Error('desktop welcome: login link is unavailable')
           }
-          await clipboard.writeText(platformLoginUrl(state.attempt.authorizeUrl))
+          clipboard.writeText(platformLoginUrl(state.attempt.authorizeUrl))
         },
         saveApiKey: async (apiKey) => {
           if (backend.host === undefined || welcomeBackend === undefined) return { ok: false }
@@ -1255,7 +1279,11 @@ async function main(): Promise<void> {
     updateSchedule.dispose()
     updateDialog.dispose()
     mandatoryUI?.dispose()
-    void Promise.all([Promise.resolve(mandatoryPolicy?.dispose()).then(() => policyAuth?.dispose()), backend.close(),
+    const closeBackend = async (): Promise<void> => {
+      try { await promptHub.dispose(); await backend.close() }
+      finally { await browserPlugin.dispose() }
+    }
+    void Promise.all([Promise.resolve(mandatoryPolicy?.dispose()).then(() => policyAuth?.dispose()), closeBackend(),
       // A Platform cleanup failure is logged without cutting the remaining Host shutdown short.
       platformView.dispose().catch((error: unknown) => { console.error(error) })])
       .catch((error: unknown) => { console.error(error) }).finally(() => { app.quit() })

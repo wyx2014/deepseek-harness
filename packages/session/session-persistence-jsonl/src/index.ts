@@ -14,7 +14,7 @@ import {
   sessionFormatCatalog,
 } from '@deepseek-ai/dsh-session-format-catalog'
 import { readdirSync, type Dirent } from 'node:fs'
-import { open, mkdir, readdir, realpath, link, rm, stat, truncate } from 'node:fs/promises'
+import { open, mkdir, readdir, realpath, link, rm, stat, lstat, truncate } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { scheduler } from 'node:timers/promises'
@@ -22,13 +22,14 @@ import { createHash, randomBytes } from 'node:crypto'
 import {
   SessionPersistence, SessionPersistenceRevision, SessionFormatUnsupportedError,
   SessionPersistenceCorruptionError,
-  SessionAlreadyExistsError, SessionPersistenceNotFoundError,
+  SessionAlreadyExistsError, SessionAlreadyOwnedError, SessionPersistenceNotFoundError, SessionPersistenceChangedError,
   assertStoredId, materializeCreateHeader, sessionFormatVersionRefusal, validateStoredEvents,
   type SessionAccess, type SessionHandle,
   type SessionHandleReadResult,
   type SessionLocation, type SessionPersistenceCreateOptions,
   type SessionPersistenceListOptions, type SessionPersistenceOpenOptions,
   type SessionPersistenceSnapshot, type SessionPersistenceStatOptions,
+  type SessionPersistenceDeleteOptions,
   type SessionPersistenceRevision as PersistenceRevision,
 } from '@deepseek-ai/dsh-session-persistence'
 import { JsonlBackendTracker, JsonlSessionHandle, type StorageHandleState } from './storage.ts'
@@ -57,6 +58,9 @@ import {
 } from './generation.ts'
 
 export type { JsonlCompression } from './format.ts'
+
+/** Durable whole-Session deletion; retained beside the stable kernel lock to seal the identity. */
+const DELETED_FILENAME = 'session.deleted'
 
 /**
  * Internal handoff-reuse policy, not deployment configuration: a cold
@@ -272,6 +276,8 @@ class JsonlSessionPersistence extends SessionPersistence {
   private readonly coldLogMemo = new Map<SessionId, StoredLog>()
   /** One joinable decode/migration operation per selected historical Session file revision. */
   private readonly migrationPreparations = new Map<SessionId, MigrationPreparation>()
+  private readonly deletions = new Set<Promise<boolean>>()
+  private stoppingDeletions = false
 
   constructor(ctx: Context, public config: Config) {
     super(ctx)
@@ -295,6 +301,10 @@ class JsonlSessionPersistence extends SessionPersistence {
     }
     this.assertUsableRoot()
     this.tracker.install(ctx)
+    ctx.effect(() => async () => {
+      this.stoppingDeletions = true
+      await Promise.allSettled([...this.deletions])
+    }, 'session-persistence-jsonl deletions')
   }
 
   /**
@@ -326,7 +336,8 @@ class JsonlSessionPersistence extends SessionPersistence {
     const inheritedEventCount = SessionLogOffset(options?.inheritedEventCount ?? 0)
     await this.ensureRootEncoding()
     options?.signal?.throwIfAborted()
-    if (this.tracker.hasPending(snapshot.id) || await this.findLog(snapshot.id, options?.signal) !== undefined) {
+    if (this.tracker.hasPending(snapshot.id) || await this.findLog(snapshot.id, options?.signal) !== undefined
+      || await this.findDeletedDirectory(snapshot.id) !== undefined) {
       throw new SessionAlreadyExistsError(snapshot.id)
     }
     options?.signal?.throwIfAborted()
@@ -431,6 +442,101 @@ class JsonlSessionPersistence extends SessionPersistence {
    */
   flush(): Promise<void> {
     return this.tracker.flushAll()
+  }
+
+  /**
+   * Seal one inactive Session under the existing single-writer lock, remove every physical log generation,
+   * then await projection cleanup. The marker and lock inode survive so interruption cannot expose an older log.
+   * @param id - the inspected Session identity.
+   * @param options - inspected revision and optional cancellation before the marker commits.
+   * @returns whether an existing Session was deleted rather than an absent retry.
+   */
+  override delete(id: SessionId, options: SessionPersistenceDeleteOptions): Promise<boolean> {
+    if (this.stoppingDeletions) return Promise.reject(new Error('session-persistence-jsonl: deletion service is stopping'))
+    const operation = this.deleteStored(id, options)
+    this.deletions.add(operation)
+    void operation.then(() => this.deletions.delete(operation), () => this.deletions.delete(operation))
+    return operation
+  }
+
+  private async deleteStored(id: SessionId, options: SessionPersistenceDeleteOptions): Promise<boolean> {
+    options.signal?.throwIfAborted()
+    this.tracker.claimWrite(id)
+    let lease: SessionWriteLease | undefined
+    let failure: { error: unknown } | undefined
+    try {
+      if (this.ctx.get('sessions')?.get(id)) throw new SessionAlreadyOwnedError(id)
+      await this.ensureRootEncoding()
+      const selected = await this.findLog(id, options.signal)
+      const deletedDir = await this.findDeletedDirectory(id)
+      if (selected && deletedDir) throw new Error(`duplicate JSONL session id "${id}" includes a deleted identity`)
+      const dir = selected ? dirname(selected.sourcePath) : deletedDir
+      if (dir === undefined) {
+        options.signal?.throwIfAborted()
+        await this.ctx.parallel('session-persistence/deleted', id)
+        return false
+      }
+      if (!(await lstat(dir)).isDirectory()) throw new Error(`session "${id}": deletion requires a real artifact directory`)
+      lease = await SessionWriteLease.acquire(dir, id)
+      if (this.ctx.get('sessions')?.get(id)) throw new SessionAlreadyOwnedError(id)
+      const sealed = await this.exists(join(dir, DELETED_FILENAME))
+      if (!sealed) {
+        const snapshot = await this.stat(id, options.signal === undefined ? undefined : { signal: options.signal })
+        if (snapshot?.revision !== options.expectedRevision) throw new SessionPersistenceChangedError(id)
+        options.signal?.throwIfAborted()
+        if (snapshot === undefined) {
+          await this.ctx.parallel('session-persistence/deleted', id)
+          return false
+        }
+        const markerPath = join(dir, DELETED_FILENAME)
+        if (process.platform === 'win32') {
+          const staging = await this.writeSyncedTempFile(markerPath, '')
+          try { await publishNewFileWin32(staging, markerPath) }
+          finally { await rm(staging, { force: true }) }
+        } else {
+          const marker = await open(markerPath, 'wx', 0o600)
+          try { await marker.sync() } finally { await marker.close() }
+        }
+      }
+      // Past the marker, retries must finish removal even if their caller cancels.
+      if (process.platform !== 'win32') await this.syncDirPosix(dir)
+      this.coldLogMemo.delete(id)
+      const preparing = this.migrationPreparations.get(id)
+      if (preparing) {
+        preparing.controller.abort(new SessionPersistenceNotFoundError(id))
+        await Promise.allSettled([preparing.promise])
+      }
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        if (parseGenerationLogFilename(entry.name, this.compression) !== undefined
+          || parseGenerationLogFilename(entry.name, this.oppositeCompression()) !== undefined) {
+          await rm(join(dir, entry.name), { force: true })
+        }
+      }
+      if (process.platform !== 'win32') await this.syncDirPosix(dir)
+      await this.ctx.parallel('session-persistence/deleted', id)
+      return !sealed
+    } catch (error) {
+      failure = { error }
+      throw error
+    } finally {
+      try {
+        await lease?.release()
+      } catch (error) {
+        if (failure) throw new AggregateError([failure.error, error], `session "${id}": deletion and lock release failed`)
+        throw error
+      } finally { this.tracker.releaseClaim(id) }
+    }
+  }
+
+  /** Find a sealed identity, including after all of its log generations were removed. */
+  private async findDeletedDirectory(id: SessionId): Promise<string | undefined> {
+    const matches: string[] = []
+    for (const project of await this.listProjectDirs()) {
+      const dir = join(project, encodeSegment(id))
+      if (await this.exists(join(dir, DELETED_FILENAME))) matches.push(dir)
+    }
+    if (matches.length > 1) throw new Error(`duplicate deleted JSONL session id "${id}"`)
+    return matches[0]
   }
 
   /**
@@ -1268,6 +1374,7 @@ class JsonlSessionPersistence extends SessionPersistence {
   /* v8 ignore stop */
 
   private async rejectExistingLog(finalPath: string, id: SessionId): Promise<void> {
+    if (await this.exists(join(dirname(finalPath), DELETED_FILENAME))) throw new SessionAlreadyExistsError(id)
     // Never publish over an existing committed log: materialize is the first
     // write of a session the backend believes is new. A file here means a
     // different session shares this id on disk — reject loudly. (create already
@@ -1467,6 +1574,7 @@ class JsonlSessionPersistence extends SessionPersistence {
       throw error
     }
     signal?.throwIfAborted()
+    if (entries.some(entry => entry.name === DELETED_FILENAME)) return undefined
     const generations: Array<{ readonly path: string; readonly version: number }> = []
     const opposite: string[] = []
     for (const entry of entries) {
@@ -1657,6 +1765,7 @@ class JsonlSessionPersistence extends SessionPersistence {
       if (isENOENT(error)) return undefined
       throw error
     }
+    if (entries.some(entry => entry.name === DELETED_FILENAME)) return undefined
     const generations: Array<{ readonly name: string; readonly version: number }> = []
     for (const entry of entries) {
       const version = parseGenerationLogFilename(entry.name, this.oppositeCompression())

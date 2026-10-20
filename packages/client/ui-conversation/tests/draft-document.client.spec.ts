@@ -18,9 +18,9 @@ type ReferenceContent = Omit<DraftReference, 'offset' | 'length'>
 const file: ReferenceContent = {
   source: 'reference', ref: '@src/main.ts', label: 'main.ts', appearance: 'file', clipboardText: '@src/main.ts',
 }
-const folder: ReferenceContent = {
+const folder = {
   source: 'reference', ref: '@src/', label: 'src/', appearance: 'folder', clipboardText: '@src/',
-}
+} satisfies ReferenceContent
 const session: ReferenceContent = {
   source: 'reference', ref: '@[研究记录](dsh-session:c291cmNl)', label: '研究记录', appearance: 'session',
   clipboardText: '@[研究记录](dsh-session:c291cmNl)',
@@ -269,6 +269,23 @@ describe('draft documents in the input shell', () => {
     expect(write).toHaveBeenLastCalledWith({ text: first.text, references: [] })
   })
 
+  it('replaces one reference by occurrence identity while preserving prose, other references and the caret', () => {
+    const shell = makeShell()
+    shell.setDraft(documentOf('before ', file, '\nreview ', session, ' after'))
+    const [first, second] = shell.snapshot.occurrences
+    const caret = shell.caretSpan()
+    const replacement = { source: 'skill', ref: '/review', label: 'review', appearance: 'skill' as const, clipboardText: '/review' }
+    expect(shell.replaceReference(second!.occurrenceId, replacement)).toBe(true)
+    expect(shell.draftSnapshot).toEqual(documentOf('before ', file, '\nreview ', replacement, ' after'))
+    expect(shell.snapshot.occurrences[0]).toEqual(first)
+    expect(shell.caretSpan()).toEqual(caret)
+    const snapshot = shell.draftSnapshot
+    expect(shell.replaceReference(second!.occurrenceId, replacement)).toBe(false)
+    expect(shell.draftSnapshot).toBe(snapshot)
+    shell.dispose()
+    expect(shell.replaceReference(shell.snapshot.occurrences[1]!.occurrenceId, replacement)).toBe(false)
+  })
+
   it('binds persistence without saving and explicitly saves the current document', () => {
     const shell = makeShell()
     shell.setDraft(documentOf('read ', session))
@@ -389,6 +406,7 @@ describe('draft documents in the input shell', () => {
       shell.submit()
       await started.promise
       expect(shell.snapshot.phase).toBe('adjudicating')
+      expect(shell.replaceReference(shell.snapshot.occurrences[0]!.occurrenceId, folder)).toBe(false)
       expectInitializationBlocked(shell)
       adjudication.reject(new Error('catalog unavailable'))
       await vi.waitFor(() => {
@@ -418,6 +436,7 @@ describe('draft documents in the input shell', () => {
       shell.submit()
       await started.promise
       expect(shell.snapshot.phase).toBe('submitting')
+      expect(shell.replaceReference(shell.snapshot.occurrences[0]!.occurrenceId, folder)).toBe(false)
       expectInitializationBlocked(shell)
       outcome.resolve({ kind: 'error', text: 'command refused' })
       await vi.waitFor(() => { expect(shell.snapshot.phase).toBe('claimed') })

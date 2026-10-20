@@ -4,7 +4,7 @@ import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-test
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
-import type {} from '@deepseek-ai/dsh-skill'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { describe, expect, it, vi } from 'vitest'
 import { SessionSkillCatalog } from '../src/skill-catalog.ts'
 
@@ -47,6 +47,23 @@ async function context(): Promise<Context> {
 }
 
 describe('SessionSkillCatalog', () => {
+  it('applies management policy to the cold-session /name catalog', async () => {
+    const ctx = await context()
+    try {
+      const sessionId = SessionId('managed-cold-skills')
+      ctx.provide('sessionQuery', { observeSession: async () => observation(sessionId) } as never)
+      await ctx.plugin(SkillRegistry)
+      ctx.skills.register({ name: 'managed', description: 'Managed', source: 'runtime', content: 'Body' })
+      const catalog = new SessionSkillCatalog(ctx)
+      expect((await catalog.list({ sessionId }, new AbortController().signal)).skills.map(item => item.name)).toEqual(['managed'])
+      const removePolicy = ctx.skills.registerPolicy(() => ({ allows: () => false }))
+      expect(await catalog.list({ sessionId }, new AbortController().signal)).toEqual({ skills: [] })
+      expect(await ctx.skills.get('managed')).toBeUndefined()
+      removePolicy()
+      expect((await catalog.list({ sessionId }, new AbortController().signal)).skills.map(item => item.name)).toEqual(['managed'])
+    } finally { await ctx.fiber.dispose() }
+  })
+
   it('reads a moved cold Session catalog from its recorded current directory without resuming an Agent', async () => {
     const ctx = await context()
     const sessionId = SessionId('cold-skills')

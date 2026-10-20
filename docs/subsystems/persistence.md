@@ -326,6 +326,18 @@ The optional `eventCount`/`sizeBytes` fields remain cheap backend observations f
 
 ## The backend
 
+`delete(id, { expectedRevision })` removes an inactive Session after consumer authorization and an inspection beginning at `stat().revision`. The provider compares the revision while excluding writers/resumes, commits durable absence, and awaits `session-persistence/deleted` membership cleanup. Absence is idempotent; failures preserve a retryable operation. JSONL supports deletion and seals the identity before removing all log generations; providers without an implementation explicitly reject with `SessionDeletionUnsupportedError`. See the [persistence package](../../packages/session/session-persistence/README.md) for caller and failure rules.
+
+```ts type-equiv
+/** Options for deleting exactly the stored Session revision inspected by a caller. */
+interface SessionPersistenceDeleteOptions {
+  /** Revision captured before inspecting the log; undefined authorizes only an already absent Session. */
+  readonly expectedRevision: SessionPersistenceRevision | undefined
+  /** Cancellation before deletion commits; committed deletion and projection cleanup are uncancellable. */
+  readonly signal?: AbortSignal
+}
+```
+
 The shipped provider implements the abstract `SessionPersistence` contract (`create`/`open`/`stat`/`list`, with per-session `SessionHandle`s carrying `read`/`append`/`flush`/`close` and optional cancellation throughout) and passes the shared persistence contract suite:
 
 - **[dsh-session-persistence-jsonl](../../packages/session/session-persistence-jsonl)** — an append-only logical JSONL log per session, stored as checksummed concatenated Zstandard frames by default or raw lines by configuration, with crash-safe atomic materialization, per-batch `fsync` appends, and torn-tail truncation before the first new append. `stat`/`list` carry `sizeBytes` and a best-effort `fs.stat`-derived revision.
@@ -396,8 +408,8 @@ abstract flush(): Promise<void>
  * against revisions from the same service instance and session id: equal
  * revisions may be treated as an unchanged log; unequal revisions promise
  * nothing. Write-ownership churn does not change a revision. It exists for
- * derived read-model caches keyed off `stat`/`list`; it plays no part in
- * open, read, or resume.
+ * derived read-model caches keyed off `stat`/`list` and guards an inspected
+ * deletion; it plays no part in open, read, or resume.
  * @param id - the stored session to observe.
  * @param options - optional cancellation.
  * @returns the snapshot, or `undefined` when the session does not exist.
@@ -410,6 +422,44 @@ abstract stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<S
  * @returns one snapshot per stored session.
  */
 abstract list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]>
+
+/**
+ * Delete an inspected stored Session and await derived membership cleanup.
+ * Providers must exclude active writers/resumes, compare the inspected revision under write ownership,
+ * and prevent historical generations from reappearing after interruption. Never dispose an active owner.
+ * The default explicitly refuses unsupported providers. JSONL implements this operation.
+ * @param id - the Session to delete; authorization belongs to the consumer.
+ * @param options - the revision inspected before deletion and optional pre-commit cancellation.
+ * @returns true when deletion committed, false for an already absent Session after cleanup.
+ * @throws {SessionAlreadyOwnedError} while a writer or live Session owns the identity.
+ * @throws {SessionPersistenceChangedError} when a fresh inspection is required.
+ * @throws {SessionDeletionUnsupportedError} on providers without deletion support.
+ */
+delete(id: SessionId, options: SessionPersistenceDeleteOptions): Promise<boolean>
+```
+
+Types: [SessionId](core.md)
+
+Source: [`packages/session/session-persistence/src/index.ts`](../../packages/session/session-persistence/src/index.ts)
+
+<a id="session-persistence-events"></a>
+
+### `session-persistence/*` events
+
+<a id="session-persistencedeleted--parallel"></a>
+
+#### `session-persistence/deleted` — parallel
+
+Awaited removal of derived membership after durable deletion. Also emitted on an absent retry. A failure rejects deletion; callers retain their record and retry to finish cleanup.
+
+```ts cordis-catalog
+/**
+ * Awaited removal of derived membership after durable deletion. Also emitted on an absent retry.
+ * A failure rejects deletion; callers retain their record and retry to finish cleanup.
+ * @mode parallel
+ * @param id - the deleted or already absent Session identity.
+ */
+'session-persistence/deleted'(id: SessionId): void | Promise<void>
 ```
 
 Types: [SessionId](core.md)

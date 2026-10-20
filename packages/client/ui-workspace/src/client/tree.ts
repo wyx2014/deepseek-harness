@@ -13,6 +13,7 @@ import type {
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
+import type { WorkspaceSessionGroup } from './session-groups.ts'
 
 /** Group key for Sessions outside every Workspace. */
 export const UNGROUPED_KEY = ''
@@ -21,14 +22,16 @@ export const UNGROUPED_KEY = ''
  * Resolve the Workspace browser group that owns one Session.
  * @param workspaces - authoritative Workspace membership.
  * @param sessionId - Session whose browser group is required.
- * @returns owning Workspace id, or {@link UNGROUPED_KEY} when no Workspace accounts for it.
+ * @param sessionGroups - plugin-owned groups in contribution order.
+ * @returns owning Workspace id, virtual group key, or {@link UNGROUPED_KEY}.
  */
 export function owningGroupKey(
   workspaces: readonly WorkspaceView[],
   sessionId: SessionId,
+  sessionGroups: readonly WorkspaceSessionGroup[] = [],
 ): string {
   return (workspaces.find(workspace => workspace.sessionIds.includes(sessionId))
-    ?.workspaceId as string | undefined) ?? UNGROUPED_KEY
+    ?.workspaceId as string | undefined) ?? sessionGroups.find(group => group.sessionIds.includes(sessionId))?.key ?? UNGROUPED_KEY
 }
 
 /** Pending interaction kinds with dedicated Workspace-row presentation. */
@@ -66,12 +69,13 @@ export type SessionOrderBy = 'manual' | 'updated'
 
 /** One workspace group section: header row facts + visible top-level session rows. */
 export interface GroupNode {
-  /** Group key: the workspace id or {@link UNGROUPED_KEY}. */
+  icon?: 'clock'
+  /** Workspace id, virtual group key, or {@link UNGROUPED_KEY}. */
   key: string
-  /** Backing Workspace id; absent only for the ungrouped bucket. */
+  /** Backing Workspace id; absent for virtual groups and Ungrouped. */
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
-  /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
+  /** Workspace creation time (epoch ms); absent for virtual groups and Ungrouped. */
   createdAt: number | undefined
   label: string
   /** Total visible sessions in the group. */
@@ -108,12 +112,14 @@ export interface SearchResultSet {
 
 /** Viewing state consumed by the derivation. */
 export interface TreeView {
+  sessionGroups?: readonly WorkspaceSessionGroup[]
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
 }
 
 interface Group {
+  icon?: 'clock'
   key: string
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
@@ -327,9 +333,9 @@ function orderedUngrouped(
 
 /**
  * Group Sessions by Workspace: one group per caller-ordered entity, with
- * members resolved from caller-ordered sessionIds. Sessions outside every
- * Workspace trail in the browser-local Ungrouped order, which falls back to
- * recency before that order is initialized.
+ * members resolved from caller-ordered sessionIds. Plugin-owned groups follow
+ * real Workspaces; remaining Sessions trail in browser-local Ungrouped order,
+ * which falls back to recency before that order is initialized.
  */
 function groupByWorkspace(
   list: SessionListState,
@@ -337,6 +343,7 @@ function groupByWorkspace(
   archived: ReadonlySet<SessionId>,
   archivedFilter: ArchivedFilter,
   ungroupedOrder: readonly string[] | undefined,
+  sessionGroups: readonly WorkspaceSessionGroup[],
 ): Group[] {
   const current = mainSessionId(list)
   const groups: Group[] = []
@@ -357,6 +364,18 @@ function groupByWorkspace(
       workspace.workspaceId, workspace.workspaceId, workspace.path,
       Date.parse(workspace.createdAt), workspace.title, members,
     ))
+  }
+  for (const group of sessionGroups) {
+    const members = group.sessionIds.flatMap((id) => {
+      if (accounted.has(id)) return []
+      accounted.add(id)
+      const summary = list.byId[id]
+      return summary !== undefined && sessionVisible(summary, current, archived, archivedFilter) ? [summary] : []
+    })
+    if (members.length > 0) groups.push({
+      ...buildGroup(group.key, undefined, undefined, undefined, group.label, members),
+      ...(group.icon === undefined ? {} : { icon: group.icon }),
+    })
   }
   const stray = list.ids
     .map(id => list.byId[id])
@@ -446,9 +465,9 @@ export function deriveGroups(
   const current = mainSessionId(list)
   const currentGroup = current === undefined
     ? undefined
-    : owningGroupKey(workspaces, current)
+    : owningGroupKey(workspaces, current, view.sessionGroups)
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder)) {
+  for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder, view.sessionGroups ?? [])) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,
@@ -456,6 +475,7 @@ export function deriveGroups(
       cwd: g.cwd,
       createdAt: g.createdAt,
       label: g.label,
+      ...(g.icon === undefined ? {} : { icon: g.icon }),
       sessionCount: g.sessions.length,
       expanded,
       containsCurrent: g.key === currentGroup,

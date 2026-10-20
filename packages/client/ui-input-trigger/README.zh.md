@@ -33,6 +33,8 @@ kind: "package-reference"
 
 来源可以实现 `openReference(session, reference)`，打开草稿引用而不提交。来源可以先接受预览请求，再异步加载目录。标签按来源名称路由；可编辑文本按来源当前的词表路由。返回 `false`、来源缺失或控制器已释放时，保留编辑器原有的手势处理。
 
+来源可通过 `textReferences(session)` 发布已发送文本中的精确能力引用。控制器通过可观察的 `textReferences` 快照提供目录确认的类型和查找名称。`subscribeLexicon` 同时更新引用投影和草稿词表；来源注册、目录加载及释放都会更新正在使用它们的界面。这些展示信息不改变发给模型的序列化文本。
+
 -----
 
 <a id="understand-the-implementation"></a>

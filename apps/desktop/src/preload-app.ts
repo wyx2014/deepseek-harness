@@ -8,12 +8,28 @@ import { markDocumentPlatform, syncWindowFullscreen } from './preload-platform.t
 import { syncNativeTheme } from './preload-theme.ts'
 import { syncWindowsAppearance } from './preload-windows.ts'
 import { installMandatoryUpdateOverlay } from './preload-mandatory-overlay.ts'
-import { createDesktopBrowserBridge } from './preload-browser.ts'
+import { createDesktopBrowserBridge, createDesktopBrowserAutomation } from './preload-browser.ts'
+import { PROMPT_HUB_IPC, type PromptHubAccountState } from './prompt-hub-protocol.ts'
 
 function createProductApi(): DshDesktopProductApi {
   return {
     protocolVersion: 1,
     browser: createDesktopBrowserBridge(),
+    browserAutomation: createDesktopBrowserAutomation(),
+    promptHub: {
+      state: () => ipcRenderer.invoke(PROMPT_HUB_IPC.state) as Promise<PromptHubAccountState>,
+      start: () => ipcRenderer.invoke(PROMPT_HUB_IPC.start) as Promise<PromptHubAccountState>,
+      cancel: () => ipcRenderer.invoke(PROMPT_HUB_IPC.cancel) as Promise<PromptHubAccountState>,
+      signOut: () => ipcRenderer.invoke(PROMPT_HUB_IPC.signOut) as Promise<PromptHubAccountState>,
+      subscribe(listener) {
+        const receive = (_event: Electron.IpcRendererEvent, state: PromptHubAccountState): void => {
+          try { listener(state) }
+          catch (_error) { console.error('PromptHub account listener failed') }
+        }
+        ipcRenderer.on(PROMPT_HUB_IPC.changed, receive)
+        return () => { ipcRenderer.off(PROMPT_HUB_IPC.changed, receive) }
+      },
+    },
     deviceInfo: () => ipcRenderer.invoke(DESKTOP_IPC.deviceInfo) as Promise<string>,
     keyboard: {
       closeWindow: revision => ipcRenderer.invoke(DESKTOP_IPC.shortcutsCloseWindow, revision) as Promise<void>,

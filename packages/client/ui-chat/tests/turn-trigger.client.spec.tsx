@@ -60,20 +60,25 @@ describe('Turn trigger notices', () => {
   })
 
   it.each([
-    { locale: en, title: 'Automation task' },
-    { locale: zh, title: '自动化任务' },
-  ])('uses the automation task label $title and shared clock', ({ locale, title }) => {
-    const node = trigger({ kind: 'schedule' })
+    { locale: en, title: 'Sent by scheduled task', kind: 'tpcowork-automation' },
+    { locale: zh, title: '由定时任务发送', kind: 'tpcowork-automation' },
+  ])('shows the scheduled prompt with $title for $kind', ({ locale, title, kind }) => {
+    const node = trigger({ kind, taskId: 'task', runId: 'run' })
     const view = render(<TurnTriggerNodeView node={node} t={makeTranslate(locale)} />)
-    expect(view.getByRole('button').textContent).toContain(title)
-    const reference = render(<IconClockOutlineRegular size={14} />)
-    expect(view.getByRole('button').querySelector('svg')?.outerHTML)
+    expect(view.getByText(title)).toBeTruthy()
+    expect(view.container.querySelector('[data-context-text]')?.textContent).toBe('Recorded notification\nwith its original body.')
+    expect(view.queryByRole('button')).toBeNull()
+    expect(view.queryByText('Execution requested')).toBeNull()
+    expect(view.queryByText('收到执行请求')).toBeNull()
+    expect(view.container.querySelector('[data-context-fields]')).toBeNull()
+    const reference = render(<IconClockOutlineRegular size={14} aria-hidden />)
+    expect(view.container.querySelector('[data-scheduled-message] svg')?.outerHTML)
       .toBe(reference.container.querySelector('svg')?.outerHTML)
-    expect(node.data.source).toEqual({ kind: 'schedule' })
+    expect(node.data.source).toEqual({ kind, taskId: 'task', runId: 'run' })
   })
 
   it('opens the recorded notice body and closes it independently of the Turn', () => {
-    const view = render(<TurnTriggerNodeView node={trigger({ kind: 'schedule' })} t={makeTranslate(en)} />)
+    const view = render(<TurnTriggerNodeView node={trigger({ kind: 'custom-extension' })} t={makeTranslate(en)} />)
     const button = view.getByRole('button')
     expect(button.getAttribute('aria-expanded')).toBe('false')
     expect(view.container.querySelector('[data-context-text]')).toBeNull()

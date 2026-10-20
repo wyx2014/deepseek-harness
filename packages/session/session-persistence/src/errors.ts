@@ -36,6 +36,24 @@ export class SessionAlreadyOwnedError extends Error {
   }
 }
 
+/** The stored Session changed after the caller inspected it for deletion. */
+export class SessionPersistenceChangedError extends Error {
+  /** @param sessionId - the Session requiring a fresh inspection. */
+  constructor(readonly sessionId: SessionId) {
+    super(`session "${sessionId}" changed before deletion; inspect it again`)
+    this.name = 'SessionPersistenceChangedError'
+  }
+}
+
+/** This provider does not implement durable Session deletion. */
+export class SessionDeletionUnsupportedError extends Error {
+  /** @param sessionId - the Session that was not deleted. */
+  constructor(readonly sessionId: SessionId) {
+    super(`session "${sessionId}": this persistence provider does not support deletion`)
+    this.name = 'SessionDeletionUnsupportedError'
+  }
+}
+
 /** A mutation (`append`/`flush`) was called on a read handle. */
 export class SessionReadOnlyError extends Error {
   /**

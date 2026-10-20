@@ -21,6 +21,7 @@ function field(source: Record<string, unknown>, key: string): string {
 export function turnTriggerDetails(node: ContextMessageNode): {
   title: ChatKey
   icon: TurnTriggerIcon
+  scheduledMessage?: true
 } {
   const source = record(node.source)
   const kind = field(source, 'kind')
@@ -55,6 +56,8 @@ export function turnTriggerDetails(node: ContextMessageNode): {
       title = 'message.trigger.schedule'
       icon = 'schedule'
       break
+    case 'tpcowork-automation':
+      return { title: 'message.trigger.schedule', icon: 'schedule', scheduledMessage: true }
     case 'tool-jobs':
       title = 'message.trigger.job'
       icon = 'job'

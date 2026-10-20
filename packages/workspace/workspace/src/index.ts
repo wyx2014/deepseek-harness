@@ -215,6 +215,20 @@ export class WorkspaceRegistry extends Service {
     this.validateStoredState(this.requireState())
     this.rebuildEntities()
     this.reportFilteredCandidates()
+    this.ctx.on('session-persistence/deleted', id => this.enqueueOperation(async () => {
+      // Storage has already committed absence. Failures leave the caller's record retryable.
+      for (const entity of this.entities.values()) await entity.detachSession(id)
+      const state = this.requireState()
+      if (state.archivedSessionIds.includes(id) || state.pinnedSessionIds.includes(id)) {
+        await this.setState({ ...state,
+          archivedSessionIds: state.archivedSessionIds.filter(value => value !== id),
+          pinnedSessionIds: state.pinnedSessionIds.filter(value => value !== id),
+        })
+      }
+      this.headers.delete(id)
+      this.sessionPaths.delete(id)
+      this.invalidSessionPaths.delete(id)
+    }))
   }
 
   /**

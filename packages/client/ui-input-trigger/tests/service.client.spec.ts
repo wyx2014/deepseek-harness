@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createScope, scopeOf } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
 import { InputTriggerController, InputTriggerService } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {
   BeginCommandRequest, ClientSessionContext, CommandClaim, InsertReferenceRequest, PickOutcome,
@@ -784,6 +785,39 @@ describe('header / drilled descent', () => {
 })
 
 describe('lexicon', () => {
+  it('publishes sent references after catalog warmup and removes them with their source', () => {
+    let references: readonly UserTextReference[] | undefined
+    let notify: (() => void) | undefined
+    const removed = vi.fn()
+    const source: InputTriggerSource = {
+      trigger: '@', name: 'capabilities', candidates: async () => [], onPick: () => undefined,
+      textReferences: (projection) => { expect(projection.sessionId).toBe(sid('a')); return references },
+      subscribeLexicon: (_session, listener) => { notify = listener; return removed },
+    }
+    const { controller, sources } = controllerBench([])
+    sources.push(source)
+    controller.sourceAdded(source)
+    expect(controller.textReferences.getSnapshot()).toEqual([])
+    references = [{ text: '$review', kind: 'skill', name: 'review' }, { text: '@聚源', kind: 'mcp', name: '聚源' }]
+    notify!()
+    const settled = controller.textReferences.getSnapshot()
+    expect(settled).toEqual(references)
+    references = references.map(reference => ({ ...reference }))
+    notify!()
+    expect(controller.textReferences.getSnapshot()).toBe(settled)
+    references = [{ text: '$review', kind: 'skill', name: 'review', path: '/moved/review/SKILL.md' }, references[1]!]
+    notify!()
+    expect(controller.textReferences.getSnapshot()).toEqual(references)
+    expect(controller.textReferences.getSnapshot()).not.toBe(settled)
+    references = [{ text: '@Research', kind: 'mcp', name: 'Research' }]
+    notify!()
+    expect(controller.textReferences.getSnapshot()).toEqual(references)
+    sources.splice(0, 1)
+    controller.sourceRemoved(source)
+    expect(controller.textReferences.getSnapshot()).toEqual([])
+    expect(removed).toHaveBeenCalledOnce()
+    controller.dispose()
+  })
   function lexSource(trigger: TriggerChar, name: string, roll?: readonly string[]  , hasHook = true): InputTriggerSource {
     return {
       trigger,

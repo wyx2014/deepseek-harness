@@ -66,6 +66,18 @@ const rowState = (options: {
 const noRows = rowState()
 
 describe('owningGroupKey', () => {
+  it('puts unbound scheduled Sessions in their virtual group while keeping real projects first', () => {
+    const sessions = withMain(list(summary('scheduled', 30), summary('project-run', 20), summary('ordinary', 10)), sid('scheduled'))
+    const workspaces = [workspace('project', ['project-run'])]
+    const sessionGroups = [{ key: 'scheduled', label: '定时任务', icon: 'clock' as const, sessionIds: [sid('scheduled'), sid('project-run')] }]
+    const groups = deriveGroups(sessions, workspaces, noRows, noAttention, { expandedGroups: ['project', 'scheduled', UNGROUPED_KEY], sessionGroups })
+    expect(groups.map(group => [group.key, group.sessions.map(session => session.id)])).toEqual([
+      ['project', ['project-run']], ['scheduled', ['scheduled']], [UNGROUPED_KEY, ['ordinary']],
+    ])
+    expect(groups[1]).toMatchObject({ label: '定时任务', icon: 'clock', containsCurrent: true, workspaceId: undefined })
+    expect(owningGroupKey(workspaces, sid('scheduled'), sessionGroups)).toBe('scheduled')
+    expect(owningGroupKey(workspaces, sid('project-run'), sessionGroups)).toBe('project')
+  })
   it('returns the owning Workspace id or the Ungrouped key', () => {
     const workspaces = [workspace('first', ['owned'])]
     expect(owningGroupKey(workspaces, sid('owned'))).toBe('first')

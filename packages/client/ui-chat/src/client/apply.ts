@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { GroupKey } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-browser/client'
@@ -81,6 +82,22 @@ export const inject = [
  * @param ctx - Client root context.
  */
 export function apply(ctx: Context): void {
+  const textReferenceSources = new WeakMap<SessionBinding, ObservableSnapshot<readonly UserTextReference[]>>()
+  const textReferencesFor = (binding: SessionBinding): ObservableSnapshot<readonly UserTextReference[]> => {
+    const existing = textReferenceSources.get(binding)
+    if (existing !== undefined) return existing
+    const source = createSnapshotStore<readonly UserTextReference[]>([])
+    textReferenceSources.set(binding, source)
+    binding.ctx.inject(['inputTriggers'], (scope) => {
+      const references = scope.inputTriggers.sessionOf(binding.ctx).textReferences
+      scope.effect(() => {
+        source.set(references.getSnapshot())
+        const stop = references.subscribe(() => { source.set(references.getSnapshot()) })
+        return () => { stop(); source.set([]) }
+      })
+    })
+    return source
+  }
   const quotaNotice = createSnapshotStore<QuotaNoticeState | null>(null)
   let quotaNoticeSeq = 0
   // Each hold is its own token, so a release can only drop the hold it was
@@ -197,7 +214,7 @@ export function apply(ctx: Context): void {
     const chat = chatSource(binding)
     const conversation = ctx.uiConversation.binding(binding)
     return {
-      hooks: { presentation },
+      hooks: { presentation, textReferences: textReferencesFor(binding) },
       keyedHooks: {
         chatNode: key => chat.getSnapshot().nodes.source(key),
         chatNodeBottom: key => chat.getSnapshot().nodes.bottomSource(key),

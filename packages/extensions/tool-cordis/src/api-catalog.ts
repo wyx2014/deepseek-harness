@@ -1987,6 +1987,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the normalized selection installed for the Session, without waiting for default persistence.',
       },
       {
+        signature: 'modelSelectionForStep(agent: Agent): ModelSelection',
+        description: 'Read the model captured for this Agent\'s prompt assembly, or its current selection before the first assembly. Host pre-step orchestration uses this snapshot to route children with their parent despite later model changes. This method is not exposed over Remote.',
+        parameters: [{ name: 'agent', description: 'live ordinary Agent managed by Session Controller.' }],
+        returns: 'detached provider, model, and optional explicit reasoning effort.',
+      },
+      {
         signature: '@Remote async initializeDefaultModel(): Promise<void>',
         description: 'Select the first available account model after login when no provider API key is configured.',
         parameters: [],
@@ -2041,6 +2047,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Admit one prompt after explicitly resuming its Session.',
         parameters: [{ name: 'request', description: 'Session identity, prompt content, source metadata, and delivery mode.' }, { name: 'signal', description: 'caller cancellation before prompt admission begins.' }],
         returns: 'acknowledgement that the Agent accepted the prompt.',
+      },
+      {
+        signature: 'promptWithAdmission(request: SessionPromptRequest, beforeDelivery: (agent: import(\'@deepseek-ai/dsh-agent\').Agent) => Promise<void>, signal: AbortSignal): Promise<SessionPromptValue>',
+        description: 'Admit a Host-owned capability selection after native attachment/model validation, before delivering the unchanged prompt. This method is not exposed over Remote.',
+        parameters: [{ name: 'request', description: 'native request, including its original id and upload receipts.' }, { name: 'beforeDelivery', description: 'durable admission on the exact resolved Agent; rejects before inbox mutation.' }, { name: 'signal', description: 'cancellation checked before validation and before Host admission.' }],
+        returns: 'the native prompt acknowledgement; request retries keep native deduplication.',
       },
       {
         signature: '@Remote(\'attachment\') attachment(request: SessionAttachmentRequest): Promise<SessionAttachmentValue>',
@@ -2145,7 +2157,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'abstract stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<SessionPersistenceSnapshot | undefined>',
-        description: 'Observe one stored session without reading its event log or taking ownership.\n\nThe snapshot\'s `revision` is an opaque change token comparable only against revisions from the same service instance and session id: equal revisions may be treated as an unchanged log; unequal revisions promise nothing. Write-ownership churn does not change a revision. It exists for derived read-model caches keyed off `stat`/`list`; it plays no part in open, read, or resume.',
+        description: 'Observe one stored session without reading its event log or taking ownership.\n\nThe snapshot\'s `revision` is an opaque change token comparable only against revisions from the same service instance and session id: equal revisions may be treated as an unchanged log; unequal revisions promise nothing. Write-ownership churn does not change a revision. It exists for derived read-model caches keyed off `stat`/`list` and guards an inspected deletion; it plays no part in open, read, or resume.',
         parameters: [{ name: 'id', description: 'the stored session to observe.' }, { name: 'options', description: 'optional cancellation.' }],
         returns: 'the snapshot, or `undefined` when the session does not exist.',
       },
@@ -2154,6 +2166,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'List every stored session visible to this process, in no promised order.',
         parameters: [{ name: 'options', description: 'optional cancellation.' }],
         returns: 'one snapshot per stored session.',
+      },
+      {
+        signature: 'delete(id: SessionId, options: SessionPersistenceDeleteOptions): Promise<boolean>',
+        description: 'Delete an inspected stored Session and await derived membership cleanup. Providers must exclude active writers/resumes, compare the inspected revision under write ownership, and prevent historical generations from reappearing after interruption. Never dispose an active owner. The default explicitly refuses unsupported providers. JSONL implements this operation.',
+        parameters: [{ name: 'id', description: 'the Session to delete; authorization belongs to the consumer.' }, { name: 'options', description: 'the revision inspected before deletion and optional pre-commit cancellation.' }],
+        returns: 'true when deletion committed, false for an already absent Session after cleanup.',
+        throws: ['{SessionAlreadyOwnedError} while a writer or live Session owns the identity.', '{SessionPersistenceChangedError} when a fresh inspection is required.', '{SessionDeletionUnsupportedError} on providers without deletion support.'],
       },
     ],
   },
@@ -2666,6 +2685,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'Layered registry of skill providers, the host+per-scope shape the tools registry established.',
     description: 'Layered registry of skill providers, the host+per-scope shape the tools registry established. A registration files into the layer of its calling context\'s scope (scopeOf): host rows and repository plugins land in the global layer, while a plugin mounted by an agent preset\'s standing composition lands in that preset\'s layer. A read merges the global layer with the viewing scope\'s chain — the nearest layer\'s entry wins a duplicate name outright, and the rank order decides duplicates only within one layer. It exposes sorted invocation-neutral summaries and loads full skill bodies on demand.',
     methods: [
+      {
+        signature: 'registerPolicy(create: (control: SkillProviderControl) => SkillEnablePolicy): () => void',
+        description: 'Register a management policy in the calling scope. Denials compose across the viewing chain.',
+        parameters: [{ name: 'create', description: 'policy factory; invalidate after changing borrowed policy state.' }],
+        returns: 'disposer removing this exact policy and invalidating discovery consumers.',
+      },
+      {
+        signature: 'async inventory(options: SkillViewOptions = {}): Promise<{ entries: SkillInventoryEntry[]; complete: boolean }>',
+        description: 'Inspect actual provider candidates, including disabled and shadowed installs.',
+        parameters: [{ name: 'options', description: 'workspace and viewing scope; policies are evaluated in that same scope.' }],
+        returns: 'management candidates and discovery completeness; never use this view to authorize loading.',
+      },
       {
         signature: 'registerProvider(create: (control: SkillProviderControl) => SkillProvider): () => void',
         description: 'Register a borrowed same-process provider synchronously during plugin apply, into the calling context\'s layer: a scoped context (an agent preset\'s standing mount) registers for that scope alone, an unscoped context registers globally. Duplicate names within one layer and reserved names throw; remote initialization belongs in `list()`. Fiber disposal unregisters the provider and invalidates catalog caches.',
@@ -4258,6 +4289,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; callers own their request inputs and must keep them unchanged until the stream settles.' }],
   },
   {
+    name: 'mcp/connection-status',
+    mode: 'parallel',
+    signature: '\'mcp/connection-status\'(status: McpConnectionStatus): void',
+    summary: 'A server connection changed state or its registered tool count changed.',
+    description: 'A server connection changed state or its registered tool count changed.',
+    parameters: [{ name: 'status', description: 'Credential-free observation of the current connection generation.' }],
+  },
+  {
     name: 'permission-presets/catalog-changed',
     mode: 'emit',
     signature: '\'permission-presets/catalog-changed\'(): void',
@@ -4296,6 +4335,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Durable task set changed; clients refetch global task and Session-active catalogs.',
     description: 'Durable task set changed; clients refetch global task and Session-active catalogs.',
     parameters: [],
+  },
+  {
+    name: 'session-persistence/deleted',
+    mode: 'parallel',
+    signature: '\'session-persistence/deleted\'(id: SessionId): void | Promise<void>',
+    summary: 'Awaited removal of derived membership after durable deletion.',
+    description: 'Awaited removal of derived membership after durable deletion. Also emitted on an absent retry. A failure rejects deletion; callers retain their record and retry to finish cleanup.',
+    parameters: [{ name: 'id', description: 'the deleted or already absent Session identity.' }],
   },
   {
     name: 'session-telemetry/record',
@@ -5902,6 +5949,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type MatcherValue = string | number | boolean | null | RegExp | readonly (string | number | boolean | null)[];',
   },
   {
+    name: 'McpConnectionStatus',
+    declaration: 'export interface McpConnectionStatus {\n    serverName: string;\n    state: \'connecting\' | \'connected\' | \'reconnecting\' | \'disconnected\' | \'error\';\n    generation: number;\n    toolCount: number;\n    observedAt: number;\n}',
+  },
+  {
     name: 'McpResourceProvider',
     declaration: 'export interface McpResourceProvider {\n    request(request: McpResourceRequest, exec: ToolExecution): Promise<JsonValue>;\n}',
   },
@@ -7006,6 +7057,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionPersistenceCreateOptions {\n    readonly signal?: AbortSignal;\n    readonly inheritedEventCount?: SessionLogOffset;\n}',
   },
   {
+    name: 'SessionPersistenceDeleteOptions',
+    declaration: 'export interface SessionPersistenceDeleteOptions {\n    readonly expectedRevision: SessionPersistenceRevision | undefined;\n    readonly signal?: AbortSignal;\n}',
+  },
+  {
     name: 'SessionPersistenceListOptions',
     declaration: 'export interface SessionPersistenceListOptions {\n    readonly signal?: AbortSignal;\n}',
   },
@@ -7354,8 +7409,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillDefinition extends SkillSummary {\n    readonly content: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
   {
+    name: 'SkillEnablePolicy',
+    declaration: 'export interface SkillEnablePolicy {\n    readonly allows: (name: string, options: SkillViewOptions) => boolean;\n}',
+  },
+  {
     name: 'SkillEntry',
     declaration: 'export interface SkillEntry {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
+  },
+  {
+    name: 'SkillInventoryEntry',
+    declaration: 'export interface SkillInventoryEntry {\n    readonly skill: SkillCandidate;\n    readonly enabled: boolean;\n    readonly selected: boolean;\n}',
   },
   {
     name: 'SkillInvocationPolicy',

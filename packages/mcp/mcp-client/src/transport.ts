@@ -36,6 +36,8 @@ export function createTransport(config: Config): Transport {
         args: config.args,
         env: buildChildEnv(config.env),
         cwd: config.cwd,
+        // A server may print resolved environment credentials. Never inherit untrusted stderr into Host logs.
+        stderr: 'ignore',
       })
     case 'streamable-http':
       return new StreamableHTTPClientTransport(

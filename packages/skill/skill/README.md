@@ -52,6 +52,8 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 - **Embedded skills.** Plugins register an in-memory skill with `ctx.skills.register(...)`; the registry fills in a default invocation policy and the `runtime` provider label. Same-name runtime registrations in one layer are first-wins with a warning.
 - **Provider registration.** A provider contributes its catalog with `ctx.skills.registerProvider(...)`; registration is synchronous, and the returned disposer removes the provider. `runtime` is a reserved provider name.
 
+Management plugins can register scoped `registerPolicy()` contributions. A denied name is excluded from `list()`, `snapshot()` and `get()` after duplicate resolution, so disabling a winner never exposes a lower-priority copy. Loading rechecks management policy after an asynchronous provider read. `inventory()` includes actual disabled and shadowed candidates with enable and selection facts; consumers must not use this management view to authorize execution. Policy owners persist decisions in the native settings service and call their invalidation control after changes.
+
 An invocation policy on every skill decides which surfaces may advertise and load it: `modelInvocable` for model-facing tools and catalogs, `userInvocable` for human-facing commands. The registry keeps all four combinations, so one discovery result can serve both surfaces without conflating their catalogs.
 
 | Policy | Model | User |
@@ -137,7 +139,7 @@ These limits define when the registry is a poor fit or needs special operational
 - **Invalidation is provider-driven** — the registry has no TTL and cannot infer that an arbitrary remote source changed; each mutable provider must retain and call its registration-scoped `invalidate()` capability from its own observation mechanism.
 - **Providers are queried sequentially** — one slow provider delays every provider registered after it; cancellation stops the caller's wait but cannot terminate work an uncooperative provider keeps running.
 - **Incomplete observations are not retained** — rejected providers are omitted and explicitly supplied candidates remain available only to the current lookup; the registry owns neither a last-good catalog nor per-provider diagnostics.
-- **Duplicate resolution is first-wins** — later lower-priority candidates within a layer are logged and hidden, and a nearer layer shadows a farther one silently; there is no API to inspect all shadowed definitions.
+- **Duplicate resolution is first-wins** — later lower-priority candidates within a layer are logged and hidden, and a nearer layer shadows a farther one silently; `inventory()` exposes shadowed candidates for management.
 
 <a id="dev-note"></a>
 ### Dev Note

@@ -89,6 +89,18 @@ describe('bundleRoster on a scratch installation', () => {
     expect(linked.roster(['@t/base', '@t/linked'])).toEqual(['@t/theme'])
   })
 
+  it('resolves a linked bundle that registers its own Host plugin', () => {
+    const linked = new Scratch()
+    onTestFinished(() => { rmSync(linked.root, { recursive: true, force: true }) })
+    const directory = join(linked.root, 'workspace', 'self')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'package.json'), JSON.stringify({ name: '@t/self', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+    writeFileSync(join(directory, 'cordis.patch.yml'), "- insert:\n    - id: self\n      name: '@t/self'\n")
+    mkdirSync(join(linked.root, 'app', 'node_modules', '@t'), { recursive: true })
+    symlinkSync(directory, join(linked.root, 'app', 'node_modules', '@t', 'self'), 'junction')
+    expect(linked.roster(['@t/self'])).toEqual([])
+  })
+
   it('applies the layers in order and keeps enabled browser rows once, with their dsh.client declaration', () => {
     scratch.web('@t/a', { inject: ['@t/b'], immediately: true })
     scratch.web('@t/b')

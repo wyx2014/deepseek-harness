@@ -195,6 +195,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.input.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
     /** Floating entries rendered inside the resident composer card. */
     'conversation.input.overlay': { kind: 'list'; scope: 'session' }
+    /** Selection notices above the editor; capabilities use native inline references. */
+    'conversation.input.selection': { kind: 'list'; scope: 'session'; owner: InputSelectionOwnerProps }
     /** Ambient entries below the composer card. */
     'conversation.composer.dock': { kind: 'list'; scope: 'session' }
     /** Compact controls at the left of the composer tool row. */
@@ -412,6 +414,12 @@ export interface InputControlOwnerProps {
   locked: boolean
 }
 
+/** Capability selections can return focus to the resident editor after changing a selection. */
+export interface InputSelectionOwnerProps extends InputControlOwnerProps {
+  /** Restore the editor's last selection and reveal its caret. */
+  focusEditor: () => void
+}
+
 /** A toolbar activity hides ordinary accessory controls while expanded; its occupant must release expansion on unmount. */
 export interface InputActivityOwnerProps extends InputControlOwnerProps {
   /** @param active - whether the occupant needs the toolbar width before the submit action. */
@@ -423,6 +431,7 @@ export type ComposerBarProps =
   PropsRuntime<'conversation.composer.bar'>
   & PropsRenderSlots<
     | 'conversation.input.attachments' | 'conversation.input.overlay'
+    | 'conversation.input.selection'
     | 'conversation.input.permission'
     | 'conversation.input.left' | 'conversation.input.plan'
     | 'conversation.input.right' | 'conversation.input.model' | 'conversation.input.activity'

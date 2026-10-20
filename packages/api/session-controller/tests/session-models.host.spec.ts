@@ -565,21 +565,26 @@ describe('Web session model selection', () => {
   })
 
   it('reads the Agent default live for a session whose log names no selection', async () => {
-    const { ctx, sessionId } = await harness()
+    const { ctx, agent, sessionId } = await harness()
     let stored = { provider: 'deepseek-official', model: 'deepseek-chat' }
-    createSessionTestRemote(ctx, {
+    const controller = createSessionTestController(ctx, {
       defaultModelSelection: () => stored,
       cwd: '/tmp',
     })
 
     expect(currentSelection(ctx, sessionId))
       .toEqual({ provider: 'deepseek-official', model: 'deepseek-chat' })
+    const beforeAssembly = controller.modelSelectionForStep(agent)
+    expect(beforeAssembly).toEqual(stored)
+    beforeAssembly.model = 'changed-copy'
+    expect(controller.modelSelectionForStep(agent)).toEqual(stored)
     // The default moving after the session exists still reaches it: New
     // Session reuses a blank session rather than minting another, so a seed
     // captured at creation would show the superseded model there.
     stored = { provider: 'deepseek-official', model: 'deepseek-reasoner' }
     expect(currentSelection(ctx, sessionId))
       .toEqual({ provider: 'deepseek-official', model: 'deepseek-reasoner' })
+    expect(controller.modelSelectionForStep(agent)).toEqual(stored)
     await ctx.fiber.dispose()
   })
 

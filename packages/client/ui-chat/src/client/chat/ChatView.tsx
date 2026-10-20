@@ -60,7 +60,7 @@ const MOTION_TAIL_MS = 800
 export function ChatView({
   useSession, useChat, useConversation, useSessions, renderSlot,
   sessionId, openFile, openSkill, openExternalLink, loadOlder, loadThrough, loadImage, inspectCall, chatScroll, forkAt, fileMentions,
-  usePresentation, useProjection, t,
+  usePresentation, useProjection, useTextReferences, t,
 }: ChatViewSlotProps) {
   const order = useChat(s => s.order)
   const groupedEntries = useConversation(snapshot => snapshot.views.grouped('chat')?.entries)
@@ -69,6 +69,7 @@ export function ChatView({
   const nodeStore = useChat(s => s.nodes)
   const deferCompletedTurns = usePresentation(policy => policy.collapseTiming === 'next-input')
   const transcriptView = usePresentation(policy => policy.mode)
+  const textReferences = useTextReferences(value => value)
   // The rail's items are accumulated in the Chat snapshot, so this selector is
   // both the data and its change signal: the array identity moves only when a
   // Turn enters, leaves, or changes its preview.
@@ -226,7 +227,7 @@ export function ChatView({
             <MarkdownDelegateProvider openExternalLink={openExternalLink} openFile={requestOpenFile} fileImages={fileImages}>
               {renderSlot('conversation.chat.flow', {
                 entries, pendingInputs, lastInputTurn, deferCollapse,
-                cwd, openFile: requestOpenFile, openSkill, inspectCall, forkAt, loadImage, fileMentions,
+                cwd, openFile: requestOpenFile, openSkill, inspectCall, forkAt, loadImage, fileMentions, textReferences,
               }, { hookContext: flowContext })}
             </MarkdownDelegateProvider>
             {/* No pending placeholders: questions (ui-user-questions) and approvals

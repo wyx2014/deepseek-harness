@@ -21,6 +21,8 @@ import type { DraftInitializationOptions } from '@deepseek-ai/dsh-client-ui-conv
 import type { RowToast } from './contract/slots.ts'
 import { pinOrderAccounts, pinOrderSource } from './pin-order.ts'
 import type { WorkspaceViewStoreActions } from './stores.ts'
+import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
+import type { WorkspaceSessionGroup, WorkspaceSessionGroupSource } from './session-groups.ts'
 
 interface MainSelection {
   readonly sessionId?: SessionId
@@ -28,10 +30,23 @@ interface MainSelection {
 }
 
 /** Optional content preparation for the resolved target Session. */
-export type StartSessionOptions = DraftInitializationOptions
+export type StartSessionOptions = DraftInitializationOptions & {
+  /** Set false to prepare a fresh Session while preserving existing blank drafts. Defaults to true. */
+  readonly reuseBlank?: boolean
+  /** Called after draft preparation succeeds, before navigation; never submits the draft. */
+  readonly onPrepared?: (sessionId: SessionId) => void
+}
 
 /** Workspace archive and directory operations consumed by Client UI domains. */
 export interface UiWorkspace {
+  /** Current plugin-owned groups for Sessions outside real Workspaces. */
+  readonly sessionGroups: HostObservable<readonly WorkspaceSessionGroup[]>
+  /**
+   * Contribute one live sidebar group for the calling plugin's lifetime.
+   * @param source - stable observable with localized label and Session membership.
+   * @returns disposer removing the group and its subscription.
+   */
+  registerSessionGroup(source: WorkspaceSessionGroupSource): () => void
   /**
    * Select a Session and show its Conversation as one UI navigation action.
    * @param target - known Session identity or durable direct-parent subagent address to display.
@@ -69,7 +84,8 @@ export interface UiWorkspace {
    * Create a fresh Session, or reuse a blank when preparing an explicit draft. A creation the Host
    * refuses is shown through the Workspace notice and leaves the selection as it was.
    * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
-   * @param options - initial content; existing text or attachments are preserved unless clearPreviousDraft is true.
+   * @param options - draft content and reuse policy; reuseBlank false creates an independent draft,
+   * and clearPreviousDraft true replaces only the target Session's text and references.
    */
   startSession(workspaceId?: WorkspaceId, options?: StartSessionOptions): void
   /**
@@ -136,6 +152,24 @@ export class DirectoryBrowseError extends Error {
 
 /** Implements Workspace archive and directory UI operations. */
 class UiWorkspaceService extends Service implements UiWorkspace {
+  readonly sessionGroups = createSnapshotStore<readonly WorkspaceSessionGroup[]>([])
+  private readonly groupSources = new Map<WorkspaceSessionGroupSource, WorkspaceSessionGroup>()
+
+  registerSessionGroup(source: WorkspaceSessionGroupSource): () => void {
+    return this.ctx.effect(() => {
+      const publish = (): void => {
+        this.groupSources.set(source, source.getSnapshot())
+        this.sessionGroups.set([...this.groupSources.values()])
+      }
+      const unsubscribe = source.subscribe(publish)
+      publish()
+      return () => {
+        unsubscribe()
+        this.groupSources.delete(source)
+        this.sessionGroups.set([...this.groupSources.values()])
+      }
+    })
+  }
   private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
   private readonly lifetime = new AbortController()
   private readonly selection = createSnapshotStore<MainSelection>(
@@ -273,13 +307,15 @@ class UiWorkspaceService extends Service implements UiWorkspace {
       this.clearMain()
       return
     }
-    const opening = draftOptions === undefined
-      ? this.openWorkspaceSession(target, undefined, false)
-      : this.openWorkspace(target, initializeDraft ? (id) => {
-        const binding = this.sessions.binding(id)
-        if (binding === undefined) this.draftPreparationFailed()
-        this.prepareDraft(binding, draftOptions)
-      } : undefined)
+    const beforeOpen = initializeDraft ? (id: SessionId) => {
+      const binding = this.sessions.binding(id)
+      if (binding === undefined) this.draftPreparationFailed()
+      this.prepareDraft(binding, draftOptions)
+      draftOptions.onPrepared?.(id)
+    } : undefined
+    const opening = draftOptions === undefined || draftOptions.reuseBlank === false
+      ? this.openWorkspaceSession(target, beforeOpen, false)
+      : this.openWorkspace(target, beforeOpen)
     void opening.catch(
       (reason: unknown) => { console.warn('new session failed:', reason) },
     )
@@ -311,8 +347,8 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     const { items, pinnedSessionIds, archivedSessionIds } = this.workspaces.list.getSnapshot()
     this.view.pinSessionOrder(
       sessionId,
-      pinOrderAccounts(items, sessionId),
-      pinOrderSource(items, this.sessions.list.getSnapshot(), { pinnedSessionIds, archivedSessionIds }),
+      pinOrderAccounts(items, sessionId, this.sessionGroups.getSnapshot()),
+      pinOrderSource(items, this.sessions.list.getSnapshot(), { pinnedSessionIds, archivedSessionIds }, this.sessionGroups.getSnapshot()),
     )
   }
 

@@ -136,7 +136,7 @@ function UnknownBlocks({ blocks, t }: { blocks: readonly unknown[]; t: Translate
  * @param props - Durable content and the locale seat.
  * @returns The content blocks as the model received them.
  */
-function ModelFacingContent({ content, t }: {
+export function ModelFacingContent({ content, t }: {
   content: ContextMessageNode['content']
   t: Translate
 }): ReactNode {

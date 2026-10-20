@@ -216,6 +216,8 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
  * {@link EVENT_WALK_EXEMPTIONS} names each one with its documentation owner.
  */
 export const EVENT_SCOPE_PAGE: Record<string, string> = {
+  mcp: 'mcp.md',
+  'session-persistence': 'persistence.md',
   'app-boot': 'boot.md',
   hmr: 'boot.md',
   'plugin-manager': 'boot.md',
@@ -262,6 +264,7 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
  * exemption cannot mask another declaration in that scope.
  */
 export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
+  'client-session/prompt-admission': 'client-face prompt routing — packages/api/session-controller/README.md owns the API',
   'command/executed': 'client-face local command acknowledgment — packages/client/ui-commands/README.md owns the API',
   'connection/reset': 'client-face transport signal — packages/api/session-controller/README.md owns the API',
   'locale/change': 'client-face locale switch signal — packages/client/locale/README.md owns the API',
@@ -280,6 +283,7 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  * appear on more than one page.
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
+  McpConnectionStatus: 'mcp.md',
   EventLogOptions: 'otel.md',
   EventLogReporter: 'otel.md',
   SessionLogOptions: 'otel.md',
@@ -532,6 +536,8 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   LlmRuntime: 'llm-streaming.md',
   StreamChunk: 'llm-streaming.md',
   SkillProviderControl: 'skills.md',
+  SkillEnablePolicy: 'skills.md',
+  SkillInventoryEntry: 'skills.md',
   CreateSessionOptions: 'persistence.md',
   PrepareSessionOptions: 'persistence.md',
   SessionHeader: 'persistence.md',
@@ -543,6 +549,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   SessionPersistenceOpenOptions: 'persistence.md',
   SessionPersistenceStatOptions: 'persistence.md',
   SessionPersistenceListOptions: 'persistence.md',
+  SessionPersistenceDeleteOptions: 'persistence.md',
   SessionPersistenceSnapshot: 'persistence.md',
   SessionInspection: 'persistence.md',
   SessionStorageMetadata: 'persistence.md',

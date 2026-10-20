@@ -30,6 +30,8 @@ export interface ToolBridgeOptions {
   registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
+  /** Host transport errors may include a credential-bearing URL. */
+  redactError?: (error: unknown) => string
 }
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
@@ -138,7 +140,7 @@ export async function syncTools(
       call: (args, execution) => client.callTool(
         { name: tool.name, arguments: args },
         { signal: execution.signal, timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
-      ),
+      ).catch((error: unknown) => { throw opts.redactError ? new Error(opts.redactError(error)) : error }),
     }))
   }
 
@@ -154,7 +156,7 @@ export async function syncTools(
     // registration occupies this server's namespace. Roll back so the model
     // sees either the full generation or none of it — never a partial set.
     for (const dispose of disposers.values()) dispose()
-    ctx.logger.error(`mcp-client(${opts.serverName}): tool registration failed, no tools registered: ${String(error)}`)
+    ctx.logger.error(`mcp-client(${opts.serverName}): tool registration failed, no tools registered: ${opts.redactError ? opts.redactError(error) : String(error)}`)
     if (opts.registrationFailure === 'throw') throw error
     return new Map()
   }

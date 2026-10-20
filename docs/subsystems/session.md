@@ -870,6 +870,16 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('selectModel') selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>
 
 /**
+ * Read the model captured for this Agent's prompt assembly, or its current
+ * selection before the first assembly. Host pre-step orchestration uses this
+ * snapshot to route children with their parent despite later model changes.
+ * This method is not exposed over Remote.
+ * @param agent - live ordinary Agent managed by Session Controller.
+ * @returns detached provider, model, and optional explicit reasoning effort.
+ */
+modelSelectionForStep(agent: Agent): ModelSelection
+
+/**
  * Select the first available account model after login when no provider API key is configured.
  * @returns after saving the first available model or retaining the existing default.
  */
@@ -936,6 +946,16 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
 @Remote('prompt') prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>
 
 /**
+ * Admit a Host-owned capability selection after native attachment/model validation,
+ * before delivering the unchanged prompt. This method is not exposed over Remote.
+ * @param request - native request, including its original id and upload receipts.
+ * @param beforeDelivery - durable admission on the exact resolved Agent; rejects before inbox mutation.
+ * @param signal - cancellation checked before validation and before Host admission.
+ * @returns the native prompt acknowledgement; request retries keep native deduplication.
+ */
+promptWithAdmission(request: SessionPromptRequest, beforeDelivery: (agent: import('@deepseek-ai/dsh-agent').Agent) => Promise<void>, signal: AbortSignal): Promise<SessionPromptValue>
+
+/**
  * Read one image proven reachable from the addressed Session log.
  * @param request - Session and attachment identities used for authorization.
  * @returns the durable attachment reference and base64-encoded bytes.
@@ -989,7 +1009,7 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
 @Remote({ mode: 'stream' }) control(signal: AbortSignal): AsyncIterable<SessionControlFrame>
 ```
 
-Types: [SessionId](core.md) · [SessionInspection](persistence.md) · [SessionSearchRequest](session-query.md)
+Types: [Agent](core.md) · [ModelSelection](core.md) · [SessionId](core.md) · [SessionInspection](persistence.md) · [SessionSearchRequest](session-query.md)
 
 Source: [`packages/api/session-controller/src/index.ts`](../../packages/api/session-controller/src/index.ts)
 
