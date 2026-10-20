@@ -370,7 +370,7 @@ pnpm run package:desktop:win:x64:unsigned
 
 产品仓库可在这个未签名 Windows 命令后追加 `--product <产品 JSON 绝对路径>`。JSON 必须包含 `schemaVersion: 1`、`productName`、`artifactPrefix`、`appId`、按顺序列出的 npm 包名 `bundles`，以及相对路径 `prepare`、`packages`。底座构建和目标运行时准备完成后，打包流程执行产品的 Node 准备脚本。该脚本构建插件，并将 npm tarball 写入 `packages`；缺少声明的 bundle 会阻止包集合准备。产品路径相对于 JSON 所在目录解析，且必须留在该目录内。产品品牌配置提供应用 ID、可执行文件名与产物前缀；可选的 `icon` 指定相对于 JSON 的产品图像。策略服务配置仍然必填，除非在 `win-x64 --unsigned --product` 下明确选择 `--standalone`。独立产品包忽略 dotenv 和继承的发布设置，不包含强制更新策略或自动更新发布配置，生成未签名测试包。
 
-包集合包含产品 bundles 及其已有的本地依赖闭包。只有 bundle 名称进入 `dsh/desktop-product.json`，并与运行时文件清单一同封存。首次创建 profile 时，这些名称追加在 Web 默认 bundles 后；后续启动保留现有 profile，包括用户禁用的产品 bundles。恢复操作仅保留 Web 默认 bundles。`runtime/python/` 下的 Python 目录完整解包，使原生解释器能够读取自身依赖；启动子进程时必须使用对应的 `app.asar.unpacked` 路径。运行时及安装后 Host smoke 与首次安装一样启用产品 bundles。
+包集合包含产品 bundles 及其已有的本地依赖闭包。Host 从完整运行时清单解析模块，包括 CLI 依赖树之外的产品包。只有 bundle 名称进入 `dsh/desktop-product.json`，并与运行时文件清单一同封存。首次创建 profile 时，这些名称追加在 Web 默认 bundles 后；后续启动保留现有 profile，包括用户禁用的产品 bundles。恢复操作仅保留 Web 默认 bundles。`runtime/python/` 下的 Python 目录完整解包，使原生解释器能够读取自身依赖；启动子进程时必须使用对应的 `app.asar.unpacked` 路径。运行时及安装后 Host smoke 与首次安装一样启用产品 bundles。
 
 先运行 `pnpm install --frozen-lockfile`，再运行 `pnpm run package:desktop:win:x64:unsigned --check` 校验配置和工具，最后执行上面的完整命令。打包自行执行完整构建和隔离的运行时 smoke，不调用在线模型。阶段日志保留在 `.desktop-build/packaging-runs/`；仅构建成功不代表安装包验证通过。依赖安装和运行时准备需要访问 npm、GitHub release 资源和 nodejs.org；网络需要时使用现有 registry 和代理配置。缓存与工具位置属于构建机器配置，不在跟踪文件中固定个人路径。
 
