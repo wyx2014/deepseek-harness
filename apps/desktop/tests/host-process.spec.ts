@@ -73,6 +73,50 @@ afterEach(async () => {
 })
 
 describe('desktop host process', () => {
+  it.each([false, true])('keeps Host startup and teardown working with browser adapter present: %s', async (provided) => {
+    const expected = provided ? { value: { version: 1 } } : { error: {
+      code: 'native_unavailable', message: 'The desktop browser bridge is unavailable in this Host runner.',
+    } }
+    const runtime = projectWithHost(`
+      import assert from 'node:assert/strict'
+      const call = op => new Promise(resolve => {
+        const listener = message => {
+          if (message.type !== 'tpcowork-browser' || message.id !== op || message.kind !== 'result') return
+          process.off('message', listener)
+          resolve(message)
+        }
+        process.on('message', listener)
+        process.send({ type: 'tpcowork-browser', version: 1, kind: 'request', id: op, op, payload: {} })
+      })
+      assert.deepEqual(await call('enable'), {
+        type: 'tpcowork-browser', version: 1, kind: 'result', id: 'enable', ...${JSON.stringify(expected)}
+      })
+      process.send({ type: 'tpcowork-browser', version: 1, kind: 'cancel', id: 'cancelled' })
+      process.on('message', async message => {
+        if (message.type !== 'shutdown') return
+        const disabled = await call('disable')
+        assert.equal(disabled.error, undefined)
+        process.send({ type: 'shutdown-complete' }, () => process.disconnect())
+      })
+      process.send({ type: 'ready', url: 'http://127.0.0.1:3080/' })
+    `)
+    const adapter = { receive: vi.fn(async (message: unknown, reply: (value: object) => void) => {
+      const request = message as { kind: string; id: string; op: string }
+      if (request.kind === 'cancel') return
+      reply({ type: 'tpcowork-browser', version: 1, kind: 'result', id: request.id,
+        ...(request.op === 'enable' ? { value: { version: 1 } } : {}) })
+    }), disconnect: vi.fn(async () => {}) }
+    const failure = vi.fn()
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env,
+      failure, undefined, undefined, undefined, provided ? adapter : undefined)
+    hosts.push(host)
+    await expect(host.start()).resolves.toEqual({ url: 'http://127.0.0.1:3080/', injections: undefined })
+    await host.stop(true)
+    expect(failure).not.toHaveBeenCalled()
+    expect(adapter.receive).toHaveBeenCalledTimes(provided ? 3 : 0)
+    expect(adapter.disconnect).toHaveBeenCalledTimes(provided ? 1 : 0)
+  })
+
   it('correlates task inspections and admission changes over private IPC', async () => {
     const host = hostProcess(projectWithHost())
     await expect(host.updateTasks('inspect')).rejects.toThrow('Host is unavailable')
@@ -196,6 +240,7 @@ describe('desktop host process', () => {
     ["process.send({ type: 'fatal', message: 'startup failed' }); process.disconnect()", 'startup failed'],
     ["process.send({ type: 'ready', url: 4 })", 'invalid IPC event'],
     ["process.send({ type: 'fatal', message: 'startup failed', diagnostic: 42 })", 'invalid IPC event'],
+    ["process.send({ type: 'tpcowork-browser', version: 1, kind: 'request', id: 7 })", 'invalid IPC event'],
     ['process.exit(0)', 'host stopped'],
   ])('rejects startup when the child fails before readiness: %s', async (source, message) => {
     const host = hostProcess(projectWithHost(source))

@@ -50,6 +50,21 @@ export const QUIT_INSPECTION_DEADLINE_MS = 2_000
 
 const MAX_HOST_DIAGNOSTIC_CHARS = 64 * 1024
 
+/** Node-mode Host runners have no native browser; reject its requests without terminating unrelated plugins. */
+function replyWithoutBrowser(message: unknown, reply: (message: object) => void): boolean {
+  if (typeof message !== 'object' || message === null) return false
+  const candidate = message as Record<string, unknown>
+  if (candidate.type !== 'tpcowork-browser' || candidate.version !== 1
+    || typeof candidate.id !== 'string' || candidate.id.length === 0 || candidate.id.length > 128) return false
+  if (candidate.kind === 'cancel') return true
+  if (candidate.kind !== 'request' || typeof candidate.op !== 'string') return false
+  reply({ type: 'tpcowork-browser', version: 1, kind: 'result', id: candidate.id,
+    ...(candidate.op === 'disable' ? {} : { error: {
+      code: 'native_unavailable', message: 'The desktop browser bridge is unavailable in this Host runner.',
+    } }) })
+  return true
+}
+
 function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false
   const candidate = message as Record<string, unknown>
@@ -165,6 +180,7 @@ export class DesktopHostProcess {
    *   `office-skills` resources fail Host startup.
    * @param packageManager - Bundled pnpm entry and Node launcher directory, scoped to package operations.
    * @param onPlatformSession - Private credential updates for embedded Platform views.
+   * @param browserPlugin - Native browser channel; without it browser operations fail with `native_unavailable`.
    */
   constructor(
     private readonly node: string,
@@ -208,12 +224,14 @@ export class DesktopHostProcess {
     child.stderr?.on('data', (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-MAX_HOST_DIAGNOSTIC_CHARS) })
     child.stdout?.pipe(process.stdout)
     child.on('message', (message: unknown) => {
+      const reply = (response: object): void => {
+        if (child.connected) child.send(response, (error) => { if (error) console.error('Desktop browser reply failed', error) })
+      }
       if (typeof message === 'object' && message !== null && 'type' in message && message.type === 'tpcowork-browser' && this.browserPlugin) {
-        void this.browserPlugin.receive(message, (reply) => {
-          if (child.connected) child.send(reply, (error) => { if (error) console.error('Desktop browser reply failed', error) })
-        }).catch((error: unknown) => { console.error('Desktop browser request failed', error) })
+        void this.browserPlugin.receive(message, reply).catch((error: unknown) => { console.error('Desktop browser request failed', error) })
         return
       }
+      if (this.browserPlugin === undefined && replyWithoutBrowser(message, reply)) return
       if (!isDesktopHostEvent(message)) {
         this.fail(new Error('dsh desktop host sent an invalid IPC event'))
         child.kill('SIGTERM')

@@ -28,6 +28,8 @@ Press F12 (Fn+F12 on media-key keyboards), Command+Option+I on macOS, or Ctrl+Sh
 
 The optional `@tpcowork/dsh-browser` integration loads its native adapter from `lib/tpcowork-browser/desktop.js`. Build and install those assets before enabling the Host plugin, and restart Desktop after changing them. Only the trusted application main frame receives its request API; website guests remain sandboxed. Host shutdown awaits browser cleanup, and packaging includes the optional native asset directory. The plugin owns website-login persistence and conversation-scoped tab control.
 
+Host runners without the native browser adapter, including the Node-mode packaging smoke, return `native_unavailable` for browser requests while keeping unrelated plugins running. Browser disable and cancellation remain safe when no adapter exists; native browser activation requires verification in the full desktop application.
+
 ## Terminal command
 
 The application menu's **Manage dsh Command…** entry, immediately below **Check for Updates…**, shows the current command and offers Install, Repair, and Remove. The command uses Desktop's installed runtime and the ordinary [dsh CLI](../cli/README.md), including when the Desktop application is closed. Open a new terminal after installation and run `dsh --version`.

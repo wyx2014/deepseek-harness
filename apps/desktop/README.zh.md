@@ -28,6 +28,8 @@ Desktop Host 的 Platform API 请求与更新策略请求用相同的 Platform �
 
 可选的 `@tpcowork/dsh-browser` 集成从 `lib/tpcowork-browser/desktop.js` 加载原生适配器。启用 Host 插件前需构建并安装这些资产，更新后重启 Desktop。只有可信应用主 frame 能调用其请求 API，网站 Guest 保持沙箱隔离。Host 退出会等待浏览器清理，打包时包含可选原生资产目录。插件负责网站登录持久化及按会话隔离的标签页控制。
 
+未提供原生浏览器适配器的 Host 启动环境（包括 Node 模式的打包 smoke）会为浏览器请求返回 `native_unavailable`，其他插件继续运行。没有适配器时，浏览器禁用和取消操作仍可安全完成；原生浏览器是否启用需在完整桌面应用中验证。
+
 ## 终端命令
 
 应用菜单中的**管理 dsh 命令…**位于**检查更新…**下方，显示当前命令，并提供安装、修复和移除操作。命令复用 Desktop 已安装的运行时和普通 [dsh CLI](../cli/README.zh.md)，Desktop 应用关闭后也可以使用。安装后打开新终端，运行 `dsh --version`。
