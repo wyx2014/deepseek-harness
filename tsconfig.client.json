@@ -21,7 +21,7 @@
     "apps/desktop/src/browser-guests.ts",
     "apps/desktop/src/browser-plugin.ts",
     "apps/desktop/src/browser-plugin-protocol.ts",
-    "apps/desktop/src/prompt-hub-protocol.ts",
+    "apps/desktop/src/tpcoworkhub-protocol.ts",
     "apps/desktop/src/ipc.ts",
     "apps/desktop/src/update-overlay.ts",
     "apps/desktop/tests/**/*.client.spec.tsx",
