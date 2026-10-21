@@ -7,7 +7,8 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
 import type { DesktopRelease } from '../src/release.ts'
-import { developmentRuntimeDirectory, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
+import { developmentRuntimeDirectory, resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { canReuseDevelopmentRuntime } from './development-runtime.ts'
 import { prepareDevelopmentProject } from './development-project.ts'
 import { prepareDevelopmentApp } from './development-app.ts'
 import { preparePrimaryRuntime } from './prepare-primary-runtime.ts'
@@ -92,7 +93,10 @@ async function launchElectron(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({ options: { 'skip-build': { type: 'boolean', default: false } } })
+  const { values } = parseArgs({ options: {
+    'skip-build': { type: 'boolean', default: false },
+    'rebuild-runtime': { type: 'boolean', default: false },
+  } })
   if (!values['skip-build']) {
     await runPackageScript('build', REPOSITORY_ROOT)
     await runPackageScript('build', APP_ROOT)
@@ -121,7 +125,13 @@ async function main(): Promise<void> {
     release,
     target: resolveDesktopBuildTarget(),
   })
-  await preparePrimaryRuntime()
+  if (values['skip-build'] && !values['rebuild-runtime']
+    && canReuseDevelopmentRuntime(resolveDesktopTargetBuildPaths().runtime, resolveDesktopBuildTarget(), version, pnpmVersion)) {
+    console.log('desktop development: reusing prepared interpreters and Office resources')
+  } else {
+    console.log('desktop development: preparing interpreters and Office resources')
+    await preparePrimaryRuntime()
+  }
   await launchElectron()
 }
 
