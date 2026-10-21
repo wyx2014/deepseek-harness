@@ -82,5 +82,6 @@
     "@deepseek-ai/dsh-client-shortcuts": "workspace:*",
     "@deepseek-ai/dsh-atomic-write": "workspace:*",
     "@deepseek-ai/dsh-client-product-analytics": "workspace:*"
-  }
+  },
+  "productName": "TP Cowork"
 }

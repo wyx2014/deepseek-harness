@@ -4,7 +4,7 @@ import type { DesktopKeyboardApi, DesktopShortcutsApi } from '@deepseek-ai/dsh-c
 import type { IpcMainInvokeEvent } from 'electron'
 import type { DesktopBrowserBridge } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
 import type { DesktopBrowserAutomation } from './browser-plugin-protocol.ts'
-import type { DesktopPromptHubApi } from './prompt-hub-protocol.ts'
+import type { DesktopTpcoworkHubApi } from './tpcoworkhub-protocol.ts'
 
 /** IPC channel names kept private to the desktop application bundle. */
 export const DESKTOP_IPC = {
@@ -75,7 +75,7 @@ export interface DshDesktopProductApi {
   readonly protocolVersion: 1
   readonly browser: DesktopBrowserBridge
   readonly browserAutomation: DesktopBrowserAutomation
-  readonly promptHub: DesktopPromptHubApi
+  readonly tpcoworkHub: DesktopTpcoworkHubApi
   readonly keyboard: DesktopKeyboardApi
   readonly shortcuts: DesktopShortcutsApi
   /**

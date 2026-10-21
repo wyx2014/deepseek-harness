@@ -57,8 +57,8 @@ import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
 import { DesktopBrowserPlugin } from './browser-plugin.ts'
 import { BROWSER_PLUGIN_IPC } from './browser-plugin-protocol.ts'
-import { PROMPT_HUB_IPC } from './prompt-hub-protocol.ts'
-import { createPromptHubHostClient, DesktopPromptHub } from './prompt-hub.ts'
+import { TPCOWORK_HUB_IPC } from './tpcoworkhub-protocol.ts'
+import { DesktopTpcoworkHubPlugin } from './tpcoworkhub-plugin.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
@@ -405,12 +405,13 @@ async function main(): Promise<void> {
   const applicationUrl = `${SCHEME}://app/`
   let hostUrl: string | undefined
   let hostCookie: string | undefined
-  const promptHub = new DesktopPromptHub(() => mainWindow,
-    createPromptHubHostClient(() => hostUrl, (url, init) => net.fetch(url, init)),
-    (state) => {
+  const tpcoworkHub = new DesktopTpcoworkHubPlugin(join(app.getAppPath(), 'lib', 'tpcoworkhub', 'desktop.js'), {
+    owner: () => mainWindow, hostUrl: () => hostUrl, send: (url, init) => net.fetch(url, init),
+    changed: (state) => {
       if (mainWindow === undefined || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
-      mainWindow.webContents.send(PROMPT_HUB_IPC.changed, state)
-    })
+      mainWindow.webContents.send(TPCOWORK_HUB_IPC.changed, state)
+    },
+  })
   const browserPlugin = new DesktopBrowserPlugin(join(app.getAppPath(), 'lib', 'tpcowork-browser', 'desktop.js'), {
     userData: app.getPath('userData'), window: () => mainWindow, hostUrl: () => hostUrl,
   })
@@ -511,7 +512,7 @@ async function main(): Promise<void> {
       },
       stop: async () => {
         analyticsEnabled = false
-        await promptHub.cancel()
+        await tpcoworkHub.cancel()
         stopAccount?.()
         try { await host.stop(requireCleanStop) }
         catch (error) {
@@ -719,8 +720,8 @@ async function main(): Promise<void> {
     return browserPlugin.request(operation, payload)
   })
   for (const [channel, operation] of [
-    [PROMPT_HUB_IPC.state, () => promptHub.state()], [PROMPT_HUB_IPC.start, () => promptHub.start()],
-    [PROMPT_HUB_IPC.cancel, () => promptHub.cancel()], [PROMPT_HUB_IPC.signOut, () => promptHub.signOut()],
+    [TPCOWORK_HUB_IPC.state, () => tpcoworkHub.state()], [TPCOWORK_HUB_IPC.start, () => tpcoworkHub.start()],
+    [TPCOWORK_HUB_IPC.cancel, () => tpcoworkHub.cancel()], [TPCOWORK_HUB_IPC.signOut, () => tpcoworkHub.signOut()],
   ] as const) {
     ipcMain.handle(channel, (event) => { assertProductSender(event); return operation() })
   }
@@ -953,7 +954,7 @@ async function main(): Promise<void> {
   const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
-    applicationName: 'DeepSeek Harness',
+    applicationName: 'TP Cowork',
     applicationVersion: app.getVersion(),
     // The release has no separate build number; omit Electron's bundle version.
     version: '',
@@ -1003,7 +1004,7 @@ async function main(): Promise<void> {
   ]
   const refreshApplicationMenu = (): void => {
     Menu.setApplicationMenu(Menu.buildFromTemplate(process.platform === 'win32' ? devToolsItems : [{
-      label: darwin ? app.name : currentDesktopLocale().messages.application,
+      label: darwin ? currentDesktopLocale().messages.aboutProduct : currentDesktopLocale().messages.application,
       submenu: [...applicationItems(), ...devToolsItems],
     }, ...platformMenus()]))
     tray?.relabel()
@@ -1280,7 +1281,7 @@ async function main(): Promise<void> {
     updateDialog.dispose()
     mandatoryUI?.dispose()
     const closeBackend = async (): Promise<void> => {
-      try { await promptHub.dispose(); await backend.close() }
+      try { await tpcoworkHub.dispose(); await backend.close() }
       finally { await browserPlugin.dispose() }
     }
     void Promise.all([Promise.resolve(mandatoryPolicy?.dispose()).then(() => policyAuth?.dispose()), closeBackend(),

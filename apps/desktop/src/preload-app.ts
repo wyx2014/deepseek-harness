@@ -9,25 +9,25 @@ import { syncNativeTheme } from './preload-theme.ts'
 import { syncWindowsAppearance } from './preload-windows.ts'
 import { installMandatoryUpdateOverlay } from './preload-mandatory-overlay.ts'
 import { createDesktopBrowserBridge, createDesktopBrowserAutomation } from './preload-browser.ts'
-import { PROMPT_HUB_IPC, type PromptHubAccountState } from './prompt-hub-protocol.ts'
+import { TPCOWORK_HUB_IPC, type TpcoworkHubAccountState } from './tpcoworkhub-protocol.ts'
 
 function createProductApi(): DshDesktopProductApi {
   return {
     protocolVersion: 1,
     browser: createDesktopBrowserBridge(),
     browserAutomation: createDesktopBrowserAutomation(),
-    promptHub: {
-      state: () => ipcRenderer.invoke(PROMPT_HUB_IPC.state) as Promise<PromptHubAccountState>,
-      start: () => ipcRenderer.invoke(PROMPT_HUB_IPC.start) as Promise<PromptHubAccountState>,
-      cancel: () => ipcRenderer.invoke(PROMPT_HUB_IPC.cancel) as Promise<PromptHubAccountState>,
-      signOut: () => ipcRenderer.invoke(PROMPT_HUB_IPC.signOut) as Promise<PromptHubAccountState>,
+    tpcoworkHub: {
+      state: () => ipcRenderer.invoke(TPCOWORK_HUB_IPC.state) as Promise<TpcoworkHubAccountState>,
+      start: () => ipcRenderer.invoke(TPCOWORK_HUB_IPC.start) as Promise<TpcoworkHubAccountState>,
+      cancel: () => ipcRenderer.invoke(TPCOWORK_HUB_IPC.cancel) as Promise<TpcoworkHubAccountState>,
+      signOut: () => ipcRenderer.invoke(TPCOWORK_HUB_IPC.signOut) as Promise<TpcoworkHubAccountState>,
       subscribe(listener) {
-        const receive = (_event: Electron.IpcRendererEvent, state: PromptHubAccountState): void => {
+        const receive = (_event: Electron.IpcRendererEvent, state: TpcoworkHubAccountState): void => {
           try { listener(state) }
-          catch (_error) { console.error('PromptHub account listener failed') }
+          catch (_error) { console.error('TP Cowork Hub account listener failed') }
         }
-        ipcRenderer.on(PROMPT_HUB_IPC.changed, receive)
-        return () => { ipcRenderer.off(PROMPT_HUB_IPC.changed, receive) }
+        ipcRenderer.on(TPCOWORK_HUB_IPC.changed, receive)
+        return () => { ipcRenderer.off(TPCOWORK_HUB_IPC.changed, receive) }
       },
     },
     deviceInfo: () => ipcRenderer.invoke(DESKTOP_IPC.deviceInfo) as Promise<string>,

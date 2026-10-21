@@ -101,7 +101,7 @@ export function createElectronBuilderConfig(
   const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
   const packaged = resolveDesktopBuildCommit(env)
-  const productName = env.DSH_DESKTOP_PRODUCT_NAME ?? 'DeepSeek Harness'
+  const productName = env.DSH_DESKTOP_PRODUCT_NAME ?? 'TP Cowork'
   const artifactPrefix = env.DSH_DESKTOP_ARTIFACT_PREFIX ?? 'deepseek-harness'
   if (!productName.trim() || /[\x00-\x1f<>:"/\\|?*]/u.test(productName) || !/^[a-z0-9][a-z0-9-]*$/u.test(artifactPrefix)) {
     throw new Error('desktop package: invalid product name or artifact prefix')
