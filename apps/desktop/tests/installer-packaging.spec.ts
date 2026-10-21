@@ -98,6 +98,7 @@ describe('installer preparation preserves application dependencies', () => {
     }
     const config = createElectronBuilderConfig(environment, 'win32', 'x64')
     expect(config.productName).toBe('Example Product')
+    expect(config.mac.extendInfo.NSMicrophoneUsageDescription).toBe('Example Product uses your microphone to transcribe speech into message drafts.')
     expect(config.extraMetadata.productName).toBe('Example Product')
     expect(config.appId).toBe('com.example.product')
     expect(config.artifactName).toBe('example-product-${version}-${os}-${arch}-unsigned.${ext}')

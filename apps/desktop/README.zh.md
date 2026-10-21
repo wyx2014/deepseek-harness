@@ -370,7 +370,7 @@ pnpm run package:desktop:win:x64:unsigned
 
 该命令读取 `.env.windows`，要求设置 `DSH_DESKTOP_APP_ID` 和[强制更新策略配置](#mandatory-update-policy)，包括真实的 HTTPS 服务 origin。本机验收和 CI 使用 Node 24；其他工具为根 `packageManager` 固定版本的 pnpm、Git、PowerShell、tar、Python、Visual C++ Build Tools 和 Windows SDK。Python 不在 `PATH` 中时设置 `PYTHON`。命令将安装包写入 `.desktop-build/targets/win-x64/unsigned-artifacts/`，省略普通自动更新配置，清除签名凭据，且不生成发布完成记录。无需 EV 或上传凭据。签名打包和上传仍遵循正式发布要求。
 
-产品仓库可在这个未签名 Windows 命令后追加 `--product <产品 JSON 绝对路径>`。JSON 必须包含 `schemaVersion: 1`、`productName`、`artifactPrefix`、`appId`、按顺序列出的 npm 包名 `bundles`，以及相对路径 `prepare`、`packages`。底座构建和目标运行时准备完成后，打包流程执行产品的 Node 准备脚本。该脚本构建插件，并将 npm tarball 写入 `packages`；缺少声明的 bundle 会阻止包集合准备。产品路径相对于 JSON 所在目录解析，且必须留在该目录内。产品品牌配置提供应用 ID、可执行文件名与产物前缀；可选的 `icon` 指定相对于 JSON 的产品图像。策略服务配置仍然必填，除非在 `win-x64 --unsigned --product` 下明确选择 `--standalone`。独立产品包忽略 dotenv 和继承的发布设置，不包含强制更新策略或自动更新发布配置，生成未签名测试包。
+产品仓库可在这个未签名 Windows 命令后追加 `--product <产品 JSON 绝对路径>`。JSON 必须包含 `schemaVersion: 1`、`productName`、`artifactPrefix`、`appId`、按顺序列出的 npm 包名 `bundles`，以及相对路径 `prepare`、`packages`。底座构建和目标运行时准备完成后，打包流程执行产品的 Node 准备脚本。该脚本构建插件，并将 npm tarball 写入 `packages`；缺少声明的 bundle 会阻止包集合准备。产品路径相对于 JSON 所在目录解析，且必须留在该目录内。产品品牌配置提供应用 ID、可执行文件名与产物前缀；macOS 麦克风权限说明使用配置的产品名称；可选的 `icon` 指定相对于 JSON 的产品图像。策略服务配置仍然必填，除非在 `win-x64 --unsigned --product` 下明确选择 `--standalone`。独立产品包忽略 dotenv 和继承的发布设置，不包含强制更新策略或自动更新发布配置，生成未签名测试包。
 
 包集合包含产品 bundles 及其已有的本地依赖闭包。Host 从完整运行时清单解析模块，包括 CLI 依赖树之外的产品包。只有 bundle 名称进入 `dsh/desktop-product.json`，并与运行时文件清单一同封存。首次创建 profile 时，这些名称追加在 Web 默认 bundles 后；后续启动保留现有 profile，包括用户禁用的产品 bundles。恢复操作仅保留 Web 默认 bundles。`runtime/python/` 下的 Python 目录完整解包，使原生解释器能够读取自身依赖；启动子进程时必须使用对应的 `app.asar.unpacked` 路径。运行时及安装后 Host smoke 与首次安装一样启用产品 bundles。
 
