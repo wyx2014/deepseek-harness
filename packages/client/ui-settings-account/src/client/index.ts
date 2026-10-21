@@ -14,7 +14,9 @@ import type { OnboardingChange } from './onboarding-contract.ts'
 import type { PlatformBridge } from './PlatformOverlay.tsx'
 import { ContactConfig, CONTACT_CONFIG_GLOBAL } from '../contact-config.ts'
 import { contactUrl } from './contact-url.ts'
-import { AccountOnboarding } from './AccountOnboarding.tsx'
+// TP Cowork ships a pre-configured intranet model credential, so chat never needs a DeepSeek
+// account sign-in; the "sign in / add API key" dialog below is disabled so it cannot pop up.
+// import { AccountOnboarding } from './AccountOnboarding.tsx'
 import { AccountPlatformHost, type AccountPlatformHostInjected } from './AccountPlatformHost.tsx'
 import { AccountMenu } from './AccountMenu.tsx'
 import { createPlatformPages, type PlatformPages } from './platform-pages.ts'
@@ -262,9 +264,10 @@ export function apply(ctx: Context): void {
       }),
     }, DesktopOnboardingEntry))
   }
-  ctx.slots.inject('settings.models.sign-in', () => ctx.slots.register({
-    name: 'settings.models.sign-in', locale: 'settings.account', inject: () => operations,
-  }, AccountOnboarding))
+  // Disabled: see the AccountOnboarding import note above.
+  // ctx.slots.inject('settings.models.sign-in', () => ctx.slots.register({
+  //   name: 'settings.models.sign-in', locale: 'settings.account', inject: () => operations,
+  // }, AccountOnboarding))
   ctx.slots.inject('shell.quota-notice', () => ctx.slots.register({
     name: 'shell.quota-notice', locale: 'settings.account',
     select: owner => owner.code === 'ACCOUNT_QUOTA' ? owner : null,

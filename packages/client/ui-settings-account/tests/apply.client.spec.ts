@@ -98,7 +98,8 @@ it('shares account actions across seats, publishes dialog ownership, and opens c
   vi.stubGlobal('dshDesktop', {})
   const c = await start()
   const actions = operations(c)
-  expect(c.ctx.slots.entries('settings.models.sign-in')[0]!.inject!()).toBe(actions)
+  // TP Cowork ships a pre-configured intranet model credential and disables this dialog; see index.ts.
+  expect(c.ctx.slots.entries('settings.models.sign-in')).toHaveLength(0)
   // The account UI follows the live theme service through the framework hook channel.
   const theme = c.ctx.get('theme') as ThemeRuntime
   const onTheme = vi.fn()

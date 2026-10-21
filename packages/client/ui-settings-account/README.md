@@ -30,6 +30,8 @@ A new account-model sign-in-required event displays “Model unavailable. Please
 
 The client activates only inside Desktop, identified by its preload bridge. Plain Web clients keep the standard Settings launcher and API-key onboarding without account login, account settings, or an account-state subscription.
 
+In the TP Cowork fork, model onboarding leaves the DeepSeek account sign-in dialog unregistered; a configured model credential can be used without this dialog.
+
 The sidebar and Account settings display circular profile images with diameters of 24px and 32px respectively, with the account icon as fallback when the URL is absent or the image fails to load. The collapsed sidebar centers the avatar in a 36 × 36 px button. Before sign-in the sidebar launcher shows a More row instead, leading with the ellipsis glyph.
 
 The section registers through settings.section and uses the account Remote namespace. The stream survives carrier reconnects through the shared Remote supervisor. The page renders feature-owned English and Chinese copy and keeps API keys separate from account state.
