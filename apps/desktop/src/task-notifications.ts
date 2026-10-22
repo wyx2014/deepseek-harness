@@ -86,7 +86,7 @@ export class DesktopTaskNotifications {
       // A hidden or minimized window must be restored before activation, or macOS ignores the focus.
       this.focus()
       if (this.platform === 'darwin') {
-        app.dock?.show()
+        void app.dock?.show()
         app.focus({ steal: true })
       }
       click(notification.id)

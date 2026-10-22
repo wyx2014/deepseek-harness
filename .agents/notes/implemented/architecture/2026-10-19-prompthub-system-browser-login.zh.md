@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-[DesktopPromptHub](../../../../apps/desktop/src/prompt-hub.ts) 启动绑定 `127.0.0.1` 的临时监听，并通过系统浏览器打开 PromptHub `/desktop/authorize` 页面。URL 只包含回调地址和新生成的随机 state，不携带凭证。网站校验该地址，复用已有会话或跳转到密码登录页，并要求用户明确确认账号。网站通过 JSON 将 token 和 state POST 至本机回调。Desktop 校验 Origin、Host、路径与 state，限制请求大小，只接受一次确认。
+[DesktopTpcoworkHubPlugin](../../../../apps/desktop/src/tpcoworkhub-plugin.ts) 启动绑定 `127.0.0.1` 的临时监听，并通过系统浏览器打开 PromptHub `/desktop/authorize` 页面。URL 只包含回调地址和新生成的随机 state，不携带凭证。网站校验该地址，复用已有会话或跳转到密码登录页，并要求用户明确确认账号。网站通过 JSON 将 token 和 state POST 至本机回调。Desktop 校验 Origin、Host、路径与 state，限制请求大小，只接受一次确认。
 
 工具箱 Host 验证 `users:me` 后才写入既有、绑定 endpoint 的 `toolbox-prompthub/session` 凭证 grant。侧栏与技能商店共用此 grant，包括重启恢复与退出登录。无效的新 token 保留已有 grant。应用渲染进程仅通过应用主文档桥接接收账号资料、进度与安全错误。浏览器在 Host 完成验证和存储后才显示成功。
 

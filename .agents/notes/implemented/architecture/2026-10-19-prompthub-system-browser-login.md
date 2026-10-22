@@ -10,7 +10,7 @@ Desktop sign-in must reuse the user's PromptHub browser session and update the s
 
 ## Decision
 
-[DesktopPromptHub](../../../../apps/desktop/src/prompt-hub.ts) starts a temporary listener bound to `127.0.0.1` and opens PromptHub's `/desktop/authorize` page with the system browser. The URL contains the callback address and a fresh random state, never a credential. The website validates that address, reuses its existing session or redirects to its password login page, and requires explicit account confirmation. It posts the token and state as JSON to the local callback. Desktop validates Origin, Host, path and state, limits the request size, and accepts only one confirmation.
+[DesktopTpcoworkHubPlugin](../../../../apps/desktop/src/tpcoworkhub-plugin.ts) starts a temporary listener bound to `127.0.0.1` and opens PromptHub's `/desktop/authorize` page with the system browser. The URL contains the callback address and a fresh random state, never a credential. The website validates that address, reuses its existing session or redirects to its password login page, and requires explicit account confirmation. It posts the token and state as JSON to the local callback. Desktop validates Origin, Host, path and state, limits the request size, and accepts only one confirmation.
 
 The toolbox Host verifies `users:me` before writing the existing endpoint-bound `toolbox-prompthub/session` credentials grant. Sidebar and skill store share that grant, including restart recovery and sign-out. An invalid replacement token preserves the existing grant. Only account details, progress and safe failures reach the application renderer through its primary-document bridge. The browser displays success after Host verification and storage complete.
 
