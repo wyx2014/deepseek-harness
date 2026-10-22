@@ -31,6 +31,14 @@ function createProductApi(): DshDesktopProductApi {
       },
     },
     deviceInfo: () => ipcRenderer.invoke(DESKTOP_IPC.deviceInfo) as Promise<string>,
+    notifications: {
+      show: notification => ipcRenderer.invoke(DESKTOP_IPC.notificationShow, notification) as Promise<boolean>,
+      subscribe(listener) {
+        const handle = (_event: Electron.IpcRendererEvent, id: string): void => { listener(id) }
+        ipcRenderer.on(DESKTOP_IPC.notificationClick, handle)
+        return () => { ipcRenderer.off(DESKTOP_IPC.notificationClick, handle) }
+      },
+    },
     keyboard: {
       closeWindow: revision => ipcRenderer.invoke(DESKTOP_IPC.shortcutsCloseWindow, revision) as Promise<void>,
       subscribe: (listener) => {

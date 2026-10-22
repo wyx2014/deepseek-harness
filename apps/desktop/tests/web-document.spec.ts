@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { authenticateWebHost, forwardWebRequest, serveWebDocument } from '../src/web-document.ts'
+import { authenticateWebHost, authenticatedHostFetch, forwardWebRequest, serveWebDocument } from '../src/web-document.ts'
 
 const roots: string[] = []
 afterEach(async () => {
@@ -33,6 +33,23 @@ it('requires the Host authentication exchange and retains only its cookie value'
   vi.stubGlobal('fetch', fetch)
   expect(await authenticateWebHost('http://127.0.0.1:1234/?token=owned')).toBe('session=owned')
   await expect(authenticateWebHost('http://127.0.0.1:1234/')).rejects.toThrow('authentication failed')
+})
+
+it('binds native requests to the current Host cookie and refuses other ports or redirects', async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null))
+  vi.stubGlobal('fetch', fetch)
+  const send = authenticatedHostFetch('http://127.0.0.1:1234/?token=owned', 'session=current')
+  const signal = new AbortController().signal
+  await send('http://127.0.0.1:1234/api/read', {
+    method: 'POST', body: '{}', headers: { cookie: 'old-host='.repeat(3_000), 'content-type': 'application/json' }, signal,
+  })
+  const [, init] = fetch.mock.calls[0]!
+  expect(new Headers(init?.headers).get('cookie')).toBe('session=current')
+  expect(new Headers(init?.headers).get('content-type')).toBe('application/json')
+  expect(init).toMatchObject({ method: 'POST', body: '{}', signal, redirect: 'error' })
+  await expect(send('http://127.0.0.1:5678/api/read')).rejects.toThrow('origin mismatch')
+  await expect(send('https://other.example/api/read')).rejects.toThrow('origin mismatch')
+  expect(fetch).toHaveBeenCalledOnce()
 })
 
 it('forwards upload bytes and cancellation with Host credentials while keeping the response streaming', async () => {

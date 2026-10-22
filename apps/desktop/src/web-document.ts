@@ -50,6 +50,22 @@ export async function authenticateWebHost(url: string): Promise<string> {
 }
 
 /**
+ * Bind native HTTP calls to one Host cookie without consulting Chromium's cookie jar.
+ * @param host - Owned Host launch URL.
+ * @param cookie - Cookie issued by that Host's authentication exchange.
+ * @returns HTTP transport that rejects other origins and redirects while preserving request cancellation.
+ */
+export function authenticatedHostFetch(host: string, cookie: string): (input: string, init?: RequestInit) => Promise<Response> {
+  const origin = new URL(host).origin
+  return async (input, init) => {
+    if (new URL(input).origin !== origin) throw new Error('Desktop Host request origin mismatch')
+    const headers = new Headers(init?.headers)
+    headers.set('cookie', cookie)
+    return fetch(input, { ...init, headers, redirect: 'error' })
+  }
+}
+
+/**
  * Response headers not relayed to the renderer. `set-cookie` would hand the
  * Host's authentication cookie to the page's cookie jar, which the shell owns
  * instead; the rest describe the Node `fetch` connection (its encoding, length,

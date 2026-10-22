@@ -35,9 +35,10 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Authenticate the native HTTP client through the Web application's launch URL.
- * @param authenticatedUrl - URL supplied by the running Desktop Host.
- * @param send - Electron session fetch, retaining the Web authentication cookie.
+ * Verify the native HTTP client through an authenticated Web application URL.
+ * @param authenticatedUrl - Host index URL, carrying a launch token or authenticated by the transport.
+ * @param send - HTTP transport retaining this Host's authentication cookie.
+ * @param cookies - Host authentication cookie reader for native account streams.
  * @returns metadata reads and write-only credential operations over standard RPC.
  */
 export async function connectDesktopWelcome(

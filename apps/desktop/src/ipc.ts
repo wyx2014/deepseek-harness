@@ -33,6 +33,8 @@ export const DESKTOP_IPC = {
   windowFullscreen: 'dsh-desktop:window-fullscreen',
   windowsAppearance: 'dsh-desktop:windows-appearance',
   windowsMenu: 'dsh-desktop:windows-menu',
+  notificationShow: 'dsh-desktop:notification-show',
+  notificationClick: 'dsh-desktop:notification-click',
 } as const
 
 /** Desktop release update state rendered by desktop-owned UI. */
@@ -83,6 +85,16 @@ export interface DshDesktopProductApi {
    * @returns `name=value` fields separated by `; `, with no hostname, user name, or serial number.
    */
   deviceInfo(): Promise<string>
+  /** System notifications for background task results; skipped while an application window is focused. */
+  readonly notifications: {
+    /**
+     * @param notification - Localized copy, a click target and a deduplication key.
+     * @returns Whether a system notification was shown.
+     */
+    show(notification: { id: string; key: string; title: string; body: string }): Promise<boolean>
+    /** Receive the target of each clicked notification, after the window has been focused. */
+    subscribe(listener: (id: string) => void): () => void
+  }
   readonly updates: {
     status(): Promise<DesktopUpdatePresentation>
     open(): Promise<void>

@@ -12,11 +12,15 @@ import { DesktopHostFatalError, DesktopHostUncleanExitError } from '../src/host-
 import { en, zh } from '../src/locale.ts'
 import { DesktopUpdatePreparationError } from '../src/update-error.ts'
 import { writeCrashReport } from '../src/crash-report.ts'
+import { connectDesktopWelcome } from '../src/welcome-backend.ts'
 
 type InvokeEvent = { sender?: unknown; senderFrame: { url: string } }
 type InvokeHandler = (event: InvokeEvent, ...args: unknown[]) => unknown
 
-vi.mock('../src/web-document.ts', () => ({ authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn() }))
+vi.mock('../src/web-document.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/web-document.ts')>(),
+  authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn(),
+}))
 // Report persistence has its own unit tests; here it resolves within microtasks so the fatal
 // dialog never outlives the test that triggered it.
 vi.mock('../src/crash-report.ts', async importOriginal => ({
@@ -163,6 +167,7 @@ const harness = await vi.hoisted(async () => {
     setAboutPanelOptions: vi.fn<(options: Electron.AboutPanelOptionsOptions) => void>(),
     requestSingleInstanceLock: () => true,
     setAsDefaultProtocolClient: vi.fn(),
+    setAppUserModelId: vi.fn(),
     exit: vi.fn(),
     relaunch: vi.fn(),
     focus: vi.fn(),
@@ -361,14 +366,16 @@ vi.mock('../src/platform-view.ts', async importOriginal => ({
   },
 }))
 vi.mock('../src/welcome-backend.ts', () => ({
-  connectDesktopWelcome: async () => ({
+  connectDesktopWelcome: vi.fn(async (
+    _url: string, _send: Parameters<typeof connectDesktopWelcome>[1], _cookies: () => Promise<string>,
+  ) => ({
     analyticsEnabled: async () => harness.analyticsEnabled,
     report: harness.analytics,
     readLocalePreference: async () => null,
     read: async (): Promise<unknown> => (await harness.hosts.at(-1)!.fetch()).json() as Promise<unknown>,
     save: async () => ({ ok: true }),
     account: { watch: harness.watchAccount, state: async () => ({ status: 'signed-out', attempt: null }) },
-  }),
+  })),
 }))
 
 function configureTestAuthPopup(allow: boolean): void {
@@ -443,6 +450,29 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it('uses only the current Host cookie for native welcome HTTP and account streams', async () => {
+    const electronFetch = vi.spyOn((await import('electron')).net, 'fetch')
+    await readyForUpdate()
+    await Promise.resolve(invoke(DESKTOP_IPC.boot))
+    const [url, send, cookies] = vi.mocked(connectDesktopWelcome).mock.calls[0]!
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null))
+    vi.stubGlobal('fetch', request)
+    const signal = new AbortController().signal
+    const staleCookies = 'previous-host='.repeat(2_000)
+    await send(new URL('/api/settings/describe', url).href, {
+      method: 'POST', headers: { cookie: staleCookies, 'content-type': 'application/json' }, body: '{}', signal,
+    })
+    expect(request).toHaveBeenCalledOnce()
+    const [target, init] = request.mock.calls[0]!
+    expect(target).toBe(new URL('/api/settings/describe', url).href)
+    expect(new Headers(init?.headers).get('cookie')).toBe('test-cookie')
+    expect(new Headers(init?.headers).get('content-type')).toBe('application/json')
+    expect(init).toMatchObject({ method: 'POST', body: '{}', signal, redirect: 'error' })
+    expect(new URL(url).search).toBe('')
+    expect(await cookies!()).toBe('test-cookie')
+    expect(electronFetch).not.toHaveBeenCalled()
+  })
+
   it.each([true, false])('selects the package manager before Host startup (packaged=%s)', async (packaged) => {
     harness.app.isPackaged = packaged
     await readyForUpdate()
@@ -555,7 +585,7 @@ describe('desktop main startup', () => {
     await vi.advanceTimersByTimeAsync(0)
     const zh = locale === 'zh-CN'
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
-      type: 'info', title: zh ? '关于 DeepSeek Harness' : 'About DeepSeek Harness', message: 'DeepSeek Harness',
+      type: 'info', title: zh ? '关于 TP Cowork' : 'About TP Cowork', message: 'TP Cowork',
       detail: zh ? '版本 V1.0.0' : 'Version V1.0.0', buttons: [zh ? '确定' : 'OK'], cancelId: 0,
     }))
     // A dialog that cannot open is logged, not surfaced as an unhandled rejection.
@@ -819,6 +849,10 @@ describe('desktop main startup', () => {
       expect(() => handler({ sender, senderFrame: sender.mainFrame })).toThrow('unowned renderer')
       sender.mainFrame.url = original
     }
+    // Notifications validate their sender before their payload, which is renderer-controlled.
+    const notify = harness.handlers.get(DESKTOP_IPC.notificationShow)!
+    expect(() => notify({ sender: {}, senderFrame: sender.mainFrame }, { id: 'a', key: 'a', title: 'a', body: 'a' })).toThrow('unowned renderer')
+    expect(() => notify({ sender, senderFrame: sender.mainFrame }, { id: 'a', key: 'a', title: '', body: 'a' })).toThrow('invalid task notification')
   })
 
   it.each(['darwin', 'win32', 'linux'] as const)('limits native titlebar styling to macOS on %s', async (platform) => {
@@ -836,6 +870,8 @@ describe('desktop main startup', () => {
         { role: 'toggleDevTools', visible: false },
         { role: 'toggleDevTools', visible: false, accelerator: 'F12' },
       ])
+      // Windows shows notifications only for the AppUserModelID on the installer's shortcuts.
+      expect(harness.app.setAppUserModelId).toHaveBeenCalledWith('com.deepseek.dsh')
     } else {
       expect(window.options).not.toHaveProperty('titleBarStyle')
       expect(window.options).not.toHaveProperty('vibrancy')
@@ -973,7 +1009,7 @@ describe('desktop main startup', () => {
     expect(() => handler(event, 'application', NaN, 34)).toThrow('invalid popup request')
     const application = handler(event, 'application', 48, 34)
     expect(harness.menu.buildFromTemplate.mock.lastCall![0].map(item => item.label ?? item.type)).toEqual([
-      '关于 DeepSeek Harness', 'separator', '检查更新…', '管理 dsh 命令…', 'separator', '退出',
+      '关于 TP Cowork', 'separator', '检查更新…', '管理 dsh 命令…', 'separator', '退出',
     ])
     expect(harness.popup.mock.lastCall![0]).toMatchObject({ window, x: 48, y: 34 })
     expect(harness.popup.mock.lastCall![0].callback).toBeTypeOf('function')
@@ -1006,7 +1042,7 @@ describe('desktop main startup', () => {
       .find(items => items.some(item => item.role === 'editMenu'))
     if (template === undefined) throw new Error('application menu missing')
     expect(template.map(describeItem)).toEqual(platform === 'darwin'
-      ? ['Desktop test', en.fileMenu, 'editMenu', 'windowMenu']
+      ? ['TP Cowork', en.fileMenu, 'editMenu', 'windowMenu']
       : ['Application', 'editMenu'])
     const application = template[0]!.submenu as MenuItemConstructorOptions[]
     expect(application.filter(item => item.visible !== false).map(describeItem)).toEqual(platform === 'darwin'

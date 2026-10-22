@@ -15,7 +15,6 @@ import {
   powerMonitor,
   nativeImage,
   nativeTheme,
-  net,
   protocol,
   session,
   shell,
@@ -35,7 +34,7 @@ import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLoc
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { DesktopCommandManager } from './command-management.ts'
-import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
+import { serveWebDocument, authenticateWebHost, authenticatedHostFetch, forwardWebRequest } from './web-document.ts'
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
 import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashReportSource } from './crash-report.ts'
 import { openWelcomeWindow } from './welcome-window.ts'
@@ -64,6 +63,7 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
+import { DesktopTaskNotifications, packagedAppId, parseDesktopTaskNotification } from './task-notifications.ts'
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
@@ -318,6 +318,11 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
 }
 
 async function main(): Promise<void> {
+  if (process.platform === 'win32' && app.isPackaged) {
+    // Windows delivers notifications only for the AppUserModelID of the installer's Start menu shortcut.
+    const appId = packagedAppId(JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8')))
+    if (appId !== undefined) app.setAppUserModelId(appId)
+  }
   const desktopSettings = readDesktopSettings(app.getPath('userData'))
   void pruneCrashReports(app.getPath('logs'))
   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
@@ -405,8 +410,12 @@ async function main(): Promise<void> {
   const applicationUrl = `${SCHEME}://app/`
   let hostUrl: string | undefined
   let hostCookie: string | undefined
+  let hostFetch: ReturnType<typeof authenticatedHostFetch> | undefined
   const tpcoworkHub = new DesktopTpcoworkHubPlugin(join(app.getAppPath(), 'lib', 'tpcoworkhub', 'desktop.js'), {
-    owner: () => mainWindow, hostUrl: () => hostUrl, send: (url, init) => net.fetch(url, init),
+    owner: () => mainWindow, hostUrl: () => hostUrl, send: async (url, init) => {
+      if (hostFetch === undefined) throw new Error('Desktop Host is unavailable')
+      return hostFetch(url, init)
+    },
     changed: (state) => {
       if (mainWindow === undefined || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
       mainWindow.webContents.send(TPCOWORK_HUB_IPC.changed, state)
@@ -464,11 +473,14 @@ async function main(): Promise<void> {
     return {
       start: async () => {
         const ready = await host.start()
-        hostCookie = await authenticateWebHost(ready.url)
+        const cookie = await authenticateWebHost(ready.url)
+        const send = authenticatedHostFetch(ready.url, cookie)
+        hostCookie = cookie
+        hostFetch = send
         hostUrl = ready.url
         if (ready.injections === undefined) throw new Error('Desktop Host did not provide boot injections')
         injections = ready.injections
-        welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => net.fetch(input, init), async () => (await session.defaultSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '))
+        welcomeBackend = await connectDesktopWelcome(new URL('/', ready.url).href, send, () => Promise.resolve(cookie))
         analyticsEnabled = await welcomeBackend.analyticsEnabled().catch(() => false)
         if (!reportedLaunch) { reportedLaunch = true; void track('desktop_app_launch', {}) }
         stopAccount?.()
@@ -798,6 +810,14 @@ async function main(): Promise<void> {
   ipcMain.handle(DESKTOP_IPC.deviceInfo, (event) => {
     assertProductSender(event)
     return readDeviceInfo()
+  })
+  const taskNotifications = new DesktopTaskNotifications(() => { focusPrimaryWindow() })
+  ipcMain.handle(DESKTOP_IPC.notificationShow, (event, value: unknown) => {
+    assertProductSender(event)
+    const notification = parseDesktopTaskNotification(value)
+    if (notification === undefined) throw new Error('dsh desktop: invalid task notification')
+    const sender = event.sender
+    return taskNotifications.show(notification, (id) => { if (!sender.isDestroyed()) sender.send(DESKTOP_IPC.notificationClick, id) })
   })
   ipcMain.handle(DESKTOP_IPC.onboardingApiKey, async (event) => {
     assertProductSender(event)
@@ -1273,6 +1293,7 @@ async function main(): Promise<void> {
     updateJournal?.action('quit-requested')
     quitConfirmation.dispose()
     backgroundNotice?.dispose()
+    taskNotifications.dispose()
     tray?.dispose()
     stopAccount?.()
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.hide()
