@@ -128,6 +128,7 @@ describe('installer preparation preserves application dependencies', () => {
     }, 'darwin', 'arm64')
     const packaged = new Set(config.files.filter((entry): entry is string => typeof entry === 'string'))
     expect(packaged.has('lib/tpcowork-browser/**/*')).toBe(true)
+    expect(packaged.has('lib/tpcoworkhub/**/*')).toBe(true)
     for (const name of referenced) expect(packaged.has(`lib/${name}`)).toBe(true)
   })
 })

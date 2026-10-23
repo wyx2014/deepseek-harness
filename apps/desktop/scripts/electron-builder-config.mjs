@@ -145,6 +145,7 @@ export function createElectronBuilderConfig(
       'lib/preload-update-dialog.cjs',
       'lib/preload-welcome.cjs',
       'lib/tpcowork-browser/**/*',
+      'lib/tpcoworkhub/**/*',
       'renderer/**/*',
       'package.json',
       { from: buildPaths.dsh, to: 'dsh', filter: ['**/*'] },
