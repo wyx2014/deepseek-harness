@@ -38,7 +38,9 @@ Var dshNewMoved
   ${EndIf}
   StrCpy $dshNewDirectory "$INSTDIR.new-$0"
   StrCpy $dshOldDirectory "$INSTDIR.old-$0"
-  StrCpy $dshDirectoryLog "${DSH_INSTALLER_LOG_DIR}\directory-failure-$0.log"
+  ; The builder defines the updater cache after including functions, before expanding this macro.
+  StrCpy $dshDirectoryLogRoot "${DSH_INSTALLER_LOG_DIR}"
+  StrCpy $dshDirectoryLog "$dshDirectoryLogRoot\directory-failure-$0.log"
   StrCpy $dshDirectoryLogSaved ""
   StrCpy $dshOldMoved ""
   StrCpy $dshNewMoved ""

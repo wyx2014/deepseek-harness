@@ -5,6 +5,7 @@ Var dshMoveError
 Var dshMoveAttempt
 Var dshMoveMessage
 Var dshDirectoryOperation
+Var dshDirectoryLogRoot
 Var dshDirectoryLog
 Var dshDirectoryLogSaved
 
@@ -38,7 +39,7 @@ FunctionEnd
 Function dshWriteDirectoryReport
   Push $0
   Push $1
-  CreateDirectory "${DSH_INSTALLER_LOG_DIR}"
+  CreateDirectory $dshDirectoryLogRoot
   ClearErrors
   FileOpen $0 $dshDirectoryLog a
   ${If} ${Errors}

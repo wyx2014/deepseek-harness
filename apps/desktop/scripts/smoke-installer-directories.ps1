@@ -45,7 +45,7 @@ try {
     $probe = Join-Path $caseRoot 'probe.exe'
     $caseArchive = if ($mode -eq 'broken') { $brokenArchive } else { $archive }
     $reportDir = Join-Path $caseRoot 'installer-logs'
-    $compileArgs = @('/V2', "/DOUTPUT_FILE=$probe", "/DPAYLOAD_FILE=$caseArchive", "/DTARGET_DIR=$target", "/DDSH_SEVENZIP_PATH=$SevenZip", "/DREPORT_DIR=$reportDir")
+    $compileArgs = @('/WX', '/V2', "/DOUTPUT_FILE=$probe", "/DPAYLOAD_FILE=$caseArchive", "/DTARGET_DIR=$target", "/DDSH_SEVENZIP_PATH=$SevenZip", "/DREPORT_DIR=$reportDir")
     if ($FrameLibrary) { $compileArgs += "/DSOURCE_DLL=$FrameLibrary" }
     if ($mode -eq 'locked-stage') { $compileArgs += '/DLOCKED_STAGE' }
     if ($mode -in @('retry', 'cancel-lock')) { $compileArgs += '/DINTERACTIVE' }

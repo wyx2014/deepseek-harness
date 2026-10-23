@@ -13,8 +13,9 @@ OutFile "${OUTPUT_FILE}"
 LoadLanguageFile "${NSISDIR}\Contrib\Language files\English.nlf"
 LoadLanguageFile "${NSISDIR}\Contrib\Language files\SimpChinese.nlf"
 !include "..\..\installer\strings.nsh"
-!define DSH_INSTALLER_LOG_DIR "${REPORT_DIR}"
+!define DSH_INSTALLER_LOG_DIR "${DSH_UPDATER_CACHE_NAME}"
 LangString decompressionFailed ${LANG_ENGLISH} "Payload extraction failed"
+LangString decompressionFailed ${LANG_SIMPCHINESE} "安装文件解压失败"
 
 !macro installApplicationFiles
   !insertmacro dshExtractPayload "${PAYLOAD_FILE}"
@@ -24,6 +25,9 @@ LangString decompressionFailed ${LANG_ENGLISH} "Payload extraction failed"
 !else
   !include "..\..\scripts\installer-directories.nsh"
 !endif
+
+; Match electron-builder: custom functions are included before the cache name is defined.
+!define DSH_UPDATER_CACHE_NAME "${REPORT_DIR}"
 
 Section
   InitPluginsDir
