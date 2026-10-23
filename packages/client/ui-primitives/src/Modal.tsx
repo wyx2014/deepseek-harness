@@ -18,6 +18,7 @@ interface ModalBaseProps {
   shortcutModal?: string
   onKeyDownCapture?: KeyboardEventHandler<HTMLDivElement>
   backdropBlur?: boolean
+  showCloseButton?: boolean
 }
 
 type ModalProps = ModalBaseProps & (
@@ -32,6 +33,7 @@ type ModalProps = ModalBaseProps & (
  * dialog, Escape belongs to that menu first.
  * @param props.title - dialog heading (aria-label in every mode).
  * @param props.closeLabel - localized accessible close-button label.
+ * @param props.showCloseButton - omit the header close button when the footer supplies dismissal; defaults to true.
  * @param props.description - optional supporting sentence under the title.
  * @param props.children - dialog body; mark its initial-focus control with
  * data-modal-autofocus instead of React autoFocus to preserve return focus.
@@ -47,7 +49,7 @@ type ModalProps = ModalBaseProps & (
  */
 export function Modal({
   open, onClose, title, closeLabel, description, children, footer, className, contentClassName,
-  onKeyDownCapture, headless = false, backdropBlur = true, shortcutModal,
+  onKeyDownCapture, headless = false, backdropBlur = true, shortcutModal, showCloseButton = true,
 }: ModalProps) {
   const dialog = useRef<HTMLDivElement>(null)
   useModalLayer(dialog, open, onClose)
@@ -55,12 +57,13 @@ export function Modal({
   if (!open) return null
 
   return createPortal((
-    <div className={css.root} role="presentation" onKeyDownCapture={onKeyDownCapture}>
-      <div className={css.mask} style={backdropBlur ? undefined : { backdropFilter: 'none' }} aria-hidden="true" onClick={onClose} />
+    <div className={css.root} data-dsh-modal-part="overlay" role="presentation" onKeyDownCapture={onKeyDownCapture}>
+      <div className={css.mask} data-dsh-modal-part="mask" style={backdropBlur ? undefined : { backdropFilter: 'none' }} aria-hidden="true" onClick={onClose} />
       <div
         ref={dialog}
         tabIndex={-1}
         data-shortcut-modal={shortcutModal}
+        data-dsh-modal={headless ? 'headless' : 'standard'}
         className={clsx(css.dialog, className)}
         role="dialog"
         aria-modal="true"
@@ -70,19 +73,19 @@ export function Modal({
           ? children
           : (
             <>
-              <div className={clsx(css.content, contentClassName)}>
-                <div className={css.header}>
-                  <h2 className={css.title}>{title}</h2>
-                  <button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}>
+              <div className={clsx(css.content, contentClassName)} data-dsh-modal-part="content">
+                <div className={css.header} data-dsh-modal-part="header">
+                  <h2 className={css.title} data-dsh-modal-part="title">{title}</h2>
+                  {showCloseButton && <button type="button" className={css.close} data-dsh-modal-part="close" aria-label={closeLabel} onClick={onClose}>
                     <IconCloseOutlineRegular size={14} />
-                  </button>
+                  </button>}
                 </div>
                 {description !== undefined && description !== '' && (
-                  <p className={css.description}>{description}</p>
+                  <p className={css.description} data-dsh-modal-part="description">{description}</p>
                 )}
-                {children !== undefined && <div className={css.body}>{children}</div>}
+                {children !== undefined && <div className={css.body} data-dsh-modal-part="body">{children}</div>}
               </div>
-              {footer !== undefined && <div className={css.footer}>{footer}</div>}
+              {footer !== undefined && <div className={css.footer} data-dsh-modal-part="footer">{footer}</div>}
             </>
           )}
       </div>
