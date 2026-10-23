@@ -1,7 +1,9 @@
 ﻿Add-Type -AssemblyName System.Drawing
 if (-not ('InstallerCapture' -as [type])) {
     $drawingReferences = if ($PSVersionTable.PSEdition -eq 'Core') {
-        @([Drawing.Bitmap].Assembly.Location) + @(Get-ChildItem -LiteralPath (Join-Path $PSHOME 'ref') -Filter '*.dll' | Select-Object -ExpandProperty FullName)
+        @([Drawing.Bitmap].Assembly.Location) +
+            @(Get-ChildItem -LiteralPath (Join-Path $PSHOME 'ref') -Filter '*.dll' | Select-Object -ExpandProperty FullName) +
+            @(Get-ChildItem -LiteralPath $PSHOME -Filter 'System.Private.Windows.*.dll' | Select-Object -ExpandProperty FullName)
     } else { @('System.Drawing') }
     Add-Type -ReferencedAssemblies $drawingReferences -TypeDefinition @'
 using System;
