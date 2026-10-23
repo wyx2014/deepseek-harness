@@ -504,7 +504,8 @@ export class InputTriggerController {
     const previous = this.textReferences.getSnapshot()
     if (references.length !== previous.length || references.some((ref, index) => {
       const old = previous[index]
-      return ref.text !== old?.text || ref.kind !== old.kind || ref.name !== old.name || ref.path !== old.path
+      return ref.text !== old?.text || ref.kind !== old.kind || ref.name !== old.name
+        || ref.path !== old.path || ref.label !== old.label || ref.iconSrc !== old.iconSrc
     })) this.textReferences.set(references)
   }
 

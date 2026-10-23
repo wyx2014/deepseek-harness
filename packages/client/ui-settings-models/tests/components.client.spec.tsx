@@ -283,7 +283,7 @@ function cardSeatCalls(
     ])
 }
 
-async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
+async function mountFace(scripted: ReturnType<typeof scriptedFace>, providerCatalog = true) {
   const { face, update, mutate, set, unset } = scripted
   const ctx = ctxWith(face)
   const mirror = new SettingsDescribeMirror(ctx)
@@ -291,6 +291,7 @@ async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
   await controller.load()
   const renderSlot = stubRenderSlot()
   const injected: ModelsSectionProps = {
+    providerCatalog,
     controller,
     useSnapshot: bindSnapshotSelector(controller.store),
     operations: operationsWith(face),
@@ -349,6 +350,7 @@ describe('ModelsSection', () => {
       await act(async () => { refreshing = controller.load(); await started.promise })
       expect(controller.store.getSnapshot().namespaces.get('llm-deepseek')?.revision).toBe(0)
       render(<ModelsSection
+        providerCatalog={true}
         controller={controller}
         useSnapshot={bindSnapshotSelector(controller.store)}
         operations={operationsWith(face)}
@@ -710,6 +712,7 @@ describe('ModelsSection', () => {
     const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)))
     await controller.load()
     render(<ModelsSection
+      providerCatalog={true}
       controller={controller}
       useSnapshot={bindSnapshotSelector(controller.store)}
       operations={operationsWith(face)}
@@ -735,6 +738,7 @@ describe('ModelsSection', () => {
     await controller.load()
     cleanup()
     render(<ModelsSection
+      providerCatalog={true}
       controller={controller}
       useSnapshot={bindSnapshotSelector(controller.store)}
       operations={operationsWith(face)}
@@ -1517,6 +1521,7 @@ describe('ModelsSection', () => {
     const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)))
     await controller.load()
     render(<ModelsSection
+      providerCatalog={true}
       controller={controller}
       useSnapshot={bindSnapshotSelector(controller.store)}
       operations={operationsWith(face)}
@@ -1651,6 +1656,7 @@ describe('ModelsSection', () => {
       ctxWith(face.face), settingsSchema, new SettingsDescribeMirror(ctxWith(face.face)))
     await controller.load()
     render(<ModelsSection
+      providerCatalog={true}
       controller={controller}
       useSnapshot={bindSnapshotSelector(controller.store)}
       operations={operationsWith(face.face)}
@@ -1674,6 +1680,7 @@ describe('ModelsSection', () => {
     await controller.load()
     cleanup()
     render(<ModelsSection
+      providerCatalog={true}
       controller={controller}
       useSnapshot={bindSnapshotSelector(controller.store)}
       operations={operationsWith(face)}
@@ -1711,6 +1718,48 @@ describe('ModelsSection', () => {
     expect(screen.getByRole('combobox', { name: en.provider })).toBeTruthy()
     // The custom panel is mounted but hidden, so its fields are not reachable.
     expect(screen.queryByRole('textbox', { name: en.customRoute })).toBeNull()
+  })
+
+  it('opens custom APIs directly when the directory is disabled and keeps existing providers editable', async () => {
+    await mountFace(scriptedFace(), false)
+    expect(screen.queryByRole('button', { name: en.add })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.addCustomApi }))
+    expect(screen.queryByRole('tablist', { name: en.addMode })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: en.provider })).toBeNull()
+    expect(screen.queryByText(en.addCatalog)).toBeNull()
+    expect(screen.getByText(en.addCustomHint)).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: en.customRoute })).toBeTruthy()
+    fireEvent.click(screen.getByText(en.cancel))
+    expect(screen.getByRole('button', { name: en.addCustomApi })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: openaiCopy(en.editProvider) }))
+    await screen.findByLabelText(en.keyInput)
+  })
+
+  it('offers no add action when the directory is disabled and custom APIs are unavailable', async () => {
+    const scripted = scriptedFace()
+    scripted.face.settings.describe.mockResolvedValue(remoteOk({
+      writable: true, hasDocument: false,
+      namespaces: wireNamespaces().filter(view => view.ns !== 'llm-pi-ai'),
+    }))
+    await mountFace(scripted, false)
+    expect(screen.queryByRole('button', { name: en.addCustomApi })).toBeNull()
+    expect(screen.queryByRole('button', { name: en.add })).toBeNull()
+  })
+
+  it('withdraws an open custom editor when its namespace disappears without offering the disabled directory', async () => {
+    const { face, controller, mirror } = await mountFace(scriptedFace(), false)
+    fireEvent.click(screen.getByRole('button', { name: en.addCustomApi }))
+    face.settings.describe.mockResolvedValue(remoteOk({
+      writable: true, hasDocument: false,
+      namespaces: wireNamespaces().filter(view => view.ns !== 'llm-pi-ai'),
+    }))
+    await act(async () => {
+      await mirror.load()
+      await controller.load()
+    })
+    expect(screen.queryByRole('textbox', { name: en.customRoute })).toBeNull()
+    expect(screen.queryByText(en.addCatalog)).toBeNull()
+    expect(screen.queryByRole('button', { name: en.addCustomApi })).toBeNull()
   })
 
   it('switches between the modes without losing either draft', async () => {
@@ -1983,6 +2032,7 @@ describe('ModelsSection', () => {
     const { face } = scriptedFace()
     const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)))
     render(<ModelsSection
+      providerCatalog={true}
       controller={controller}
       useSnapshot={bindSnapshotSelector(controller.store)}
       operations={operationsWith(face)}

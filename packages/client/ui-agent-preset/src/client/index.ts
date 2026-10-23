@@ -12,8 +12,8 @@
  * edited where the roster is visible — the settings section's "make default"
  * — so General settings carries no duplicate control for the same field.
  *
- * Coding Tools (General settings) hide PTC and Minimal from the hero menu
- * and Settings roster when off. Hidden saved defaults fall back to Standard;
+ * Developer tools (General settings) control all preset entry points.
+ * When off, saved defaults fall back to Standard;
  * the existing gate clears staged choices while existing sessions keep their composition.
  */
 
@@ -110,6 +110,16 @@ export function apply(ctx: ClientContext): void {
   const section = new AgentPresetSectionController(ctx)
   // Turning Developer tools off clears the shared stage before any apply can compose it.
   const developerTools = ctx.configForms.developerTools.enabled
+  const whileDeveloperTools = (register: () => () => void): (() => void) => {
+    let dispose: (() => void) | undefined
+    const sync = () => {
+      if (developerTools.getSnapshot()) dispose ??= register()
+      else { dispose?.(); dispose = undefined }
+    }
+    const stop = developerTools.subscribe(sync)
+    sync()
+    return () => { stop(); dispose?.() }
+  }
   ctx.effect(() => developerTools.subscribe(() => {
     if (developerTools.getSnapshot()) return
     staged.id = undefined
@@ -199,13 +209,14 @@ export function apply(ctx: ClientContext): void {
     })
 
     const startCreatorDraft = () => {
+      if (!developerTools.getSnapshot()) return
       const seat = mainBlankSeat() ?? unboundSeat
       seat.stage('cordis', true)
       scope.uiWorkspace.startSession(undefined, { clearPreviousDraft: false })
       void seat.apply()
     }
 
-    scope.effect(() => {
+    scope.effect(() => whileDeveloperTools(() => {
       creatorDraft = startCreatorDraft
       const chip = scope.slots.register({
         name: 'conversation.hero.agentPreset',
@@ -225,9 +236,9 @@ export function apply(ctx: ClientContext): void {
         chip()
         label()
       }
-    }, 'ui-agent-preset: new-session chip and header label')
+    }), 'ui-agent-preset: new-session chip and header label')
 
-    scope.slots.inject('plugins.add.actions', () => scope.slots.register({
+    scope.slots.inject('plugins.add.actions', () => whileDeveloperTools(() => scope.slots.register({
       name: 'plugins.add.actions',
       id: 'create-plugin',
       locale: 'settings.agentPreset',
@@ -236,7 +247,7 @@ export function apply(ctx: ClientContext): void {
         load: () => controller.load(),
         startCreatorDraft,
       }),
-    }, CreatePluginMenuItem))
+    }, CreatePluginMenuItem)))
   })
 
   /** Capture the exact blank Session one Settings action may update. */
@@ -264,12 +275,12 @@ export function apply(ctx: ClientContext): void {
 
   // Ordered after Models: choosing a model is routine, and composing an
   // agent is the deployment-shaping act behind it.
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
+  ctx.slots.inject('settings.section', () => whileDeveloperTools(() => ctx.slots.register({
     name: 'settings.section',
     id: 'agent-presets',
     order: 20,
     label: () => ctx.locale.bind('settings.agentPreset')('nav'),
     locale: 'settings.agentPreset',
     inject: sectionInjected,
-  }, AgentPresetSection))
+  }, AgentPresetSection)))
 }

@@ -372,3 +372,16 @@ describe('PopupSelectView', () => {
     expect(focusComposer).not.toHaveBeenCalled()
   })
 })
+
+
+it('shows localized option icons and finds canonical aliases without changing selection identity', async () => {
+  const option = { id: 'document', label: 'Documents', iconSrc: 'data:image/png;base64,AA==', keywords: ['office-docx', 'Word'] }
+  const onSelect = vi.fn()
+  const { search } = await mountOpen({ options: async () => [option, OPTIONS[0]!], onSelect })
+  fireEvent.change(search, { target: { value: 'OFFICE-DOCX' } })
+  const row = screen.getByRole('option', { name: 'Documents' })
+  expect(screen.getAllByRole('option')).toHaveLength(1)
+  expect(row.querySelector('img')?.getAttribute('src')).toBe(option.iconSrc)
+  await act(async () => { fireEvent.keyDown(search, { key: 'Enter' }) })
+  expect(onSelect).toHaveBeenCalledWith(option, 'ctx-A')
+})

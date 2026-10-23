@@ -30,6 +30,10 @@ export type PopupSearchMode = 'substring' | 'fuzzy-label'
 export interface SelectOption {
   readonly id: string
   readonly label: string
+  /** Decorative image URL supplied by the option owner. */
+  readonly iconSrc?: string
+  /** Additional aliases for substring search, independent of the displayed label. */
+  readonly keywords?: readonly string[]
   /** Optional short marker rendered as a superscript beside the label. */
   readonly badge?: string
   readonly detail?: string

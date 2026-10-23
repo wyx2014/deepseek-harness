@@ -139,11 +139,11 @@ describe('Coding Tools default reconciliation', () => {
   })
 
   it.each([['standard', undefined], ['cordis', undefined], ['custom', 'Custom'], ['ptc', 'My PTC'], ['minimal', 'My Minimal']] as const)(
-    'preserves the allowed default %s (%s)', async (id, name) => {
+    'uses Standard for new tasks when Developer tools is off (previous: %s, %s)', async (id, name) => {
       const f = setup(id, name)
       await f.controller.reconcileCodingTools(() => true)
-      expect(f.remote.settings.update).not.toHaveBeenCalled()
-      expect(f.rows().find(row => row.isDefault)?.id).toBe(id)
+      expect(f.remote.settings.update).toHaveBeenCalledTimes(id === 'standard' ? 0 : 1)
+      expect(f.rows().find(row => row.isDefault)?.id).toBe('standard')
     },
   )
 

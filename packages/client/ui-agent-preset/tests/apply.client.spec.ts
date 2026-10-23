@@ -403,9 +403,13 @@ describe('ui-agent-preset apply', () => {
       expect(action.hooks.agentPresets.getSnapshot().options).toEqual([{ id: 'standard' }])
 
       await setDeveloperTools(false)
+      expect(slots.entries('plugins.add.actions')).toHaveLength(0)
+      action.startCreatorDraft()
+      expect(uiWorkspace.starts).toHaveLength(0)
+      await setDeveloperTools(true)
+      expect(slots.entries('plugins.add.actions')).toHaveLength(1)
       action.startCreatorDraft()
       expect(uiWorkspace.starts).toHaveLength(1)
-      expect(ctx.configForms.developerTools.enabled.getSnapshot()).toBe(false)
 
       await feature.dispose()
       expect(slots.entries('plugins.add.actions')).toHaveLength(0)
@@ -900,16 +904,17 @@ describe('ui-agent-preset apply', () => {
     declareRoot(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     await vi.waitFor(() => { expect(b.calls.filter(call => call.startsWith('settings:'))).toEqual(['settings:{"selectedDefault":"standard"}']) })
+    expect(b.slots.entries('settings.section')).toHaveLength(0)
+    await b.setDeveloperTools(true)
     const section = (b.slots.entries('settings.section')[0]!.inject as () => AgentPresetSectionInjected & Record<string, unknown>)()
     await vi.waitFor(() => { expect(section.hooks.agentPresetSection.getSnapshot().rows.find(row => row.isDefault)?.id).toBe('standard') })
-    await b.setDeveloperTools(true)
     expect(b.calls.filter(call => call.startsWith('settings:'))).toEqual(['settings:{"selectedDefault":"standard"}'])
     expect(section.hooks.agentPresetSection.getSnapshot().rows.find(row => row.isDefault)?.id).toBe('standard')
     await b.ctx.fiber.dispose()
   })
 
   it.each([['standard', undefined], ['cordis', undefined], ['mine', 'Mine'], ['ptc', 'Custom PTC'], ['minimal', 'Custom Minimal']] as const)(
-    'keeps the allowed default %s (%s) when Coding Tools are disabled', async (id, name) => {
+    'hides preset management and uses Standard when Developer tools is disabled (previous: %s, %s)', async (id, name) => {
       const b = await bench({ developerToolsEnabled: false, presets: [
         { id, isDefault: true, ...(name === undefined ? {} : { name }) },
         ...(id === 'standard' ? [] : [{ id: 'standard', isDefault: false }]),
@@ -917,11 +922,12 @@ describe('ui-agent-preset apply', () => {
       b.ctx.provide('sessions', sessionsDouble(b.ctx, { byId: {} }) as never)
       declareRoot(b.slots)
       await b.ctx.plugin({ inject: [...inject], apply }).await()
+      expect(b.slots.entries('settings.section')).toHaveLength(0)
+      if (id !== 'standard') await vi.waitFor(() => { expect(b.calls.filter(call => call.startsWith('settings:'))).toEqual(['settings:{"selectedDefault":"standard"}']) })
+      await b.setDeveloperTools(true)
       const section = (b.slots.entries('settings.section')[0]!.inject as () => AgentPresetSectionInjected & Record<string, unknown>)()
       await section.load()
-      await Promise.resolve()
-      expect(b.calls.filter(call => call.startsWith('settings:'))).toEqual([])
-      expect(section.hooks.agentPresetSection.getSnapshot().rows.find(row => row.isDefault)?.id).toBe(id)
+      expect(section.hooks.agentPresetSection.getSnapshot().rows.find(row => row.isDefault)?.id).toBe('standard')
       await b.ctx.fiber.dispose()
     },
   )
@@ -992,7 +998,10 @@ describe('ui-agent-preset apply', () => {
       await chip.load()
       expect(b.calls.filter(call => call.startsWith('select:'))).toEqual([])
       expect(chip.hooks.agentPresetSeat.getSnapshot().current).toBe(preset)
+      expect(b.slots.entries('conversation.hero.agentPreset')).toHaveLength(0)
+      expect(b.slots.entries('conversation.session.header.actions')).toHaveLength(0)
       if (blank) {
+        await b.setDeveloperTools(true)
         const section = (b.slots.entries('settings.section')[0]!.inject as () => AgentPresetSectionInjected & Record<string, unknown>)()
         await section.makeDefault('cordis')
         expect(b.calls.filter(call => call.startsWith('select:'))).toEqual(preset === 'cordis' ? [] : ['select:cordis'])
@@ -1049,8 +1058,9 @@ describe('ui-agent-preset apply', () => {
     const chip = injectSeat()
     await chip.load()
     await chip.select(preset)
-    await b.ctx.configForms.developerTools.setEnabled(false)
     const section = (b.slots.entries('settings.section')[0]!.inject as () => AgentPresetSectionInjected & Record<string, unknown>)()
+    await b.ctx.configForms.developerTools.setEnabled(false)
+    expect(b.slots.entries('settings.section')).toHaveLength(0)
     await section.load()
     expect(section.hooks.agentPresetSection.getSnapshot().rows.find(row => row.isDefault)?.id).toBe('minimal')
     expect(b.calls.filter(call => call.startsWith('settings:'))).toEqual([])

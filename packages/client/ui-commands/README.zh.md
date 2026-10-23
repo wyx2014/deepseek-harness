@@ -7,6 +7,8 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
+弹窗选项可以提供装饰图标 `iconSrc`，以及用于子串搜索的规范别名 `keywords`；两者与显示的本地化标签相互独立。
+
 ## 概述
 
 键入 `/` 命令会打开已注册的弹窗、运行客户端动作、进入宿主命令的输入或直接执行，命令行不会被静默降级为普通提示词。业务包通过 `ctx.commandUi` 注册 popupSelect（`/model`、`/permission`）或 action，也可用这两种方式装饰既有宿主命令，同时保留其目录行与参数声明。空格与回车根据会话目录解析命令行：带 `input` 的宿主描述符是 `leadingInput`，注册了 `CommandUiSpec` 的是 `popupSelect` 或 `action`，其余是 `execute`。

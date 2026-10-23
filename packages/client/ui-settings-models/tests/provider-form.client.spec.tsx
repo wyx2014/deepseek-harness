@@ -207,6 +207,7 @@ async function mountSection(options: Parameters<typeof scriptedFace>[0] = {}) {
     ctxWith(scripted.face), settingsSchema, new SettingsDescribeMirror(ctxWith(scripted.face)))
   await controller.load()
   const injected: ModelsSectionProps = {
+    providerCatalog: true,
     controller,
     useSnapshot: bindSnapshotSelector(controller.store),
     operations: operationsWith(scripted.face),
@@ -825,6 +826,7 @@ describe('provider rows', () => {
       ctxWith(scripted.face), settingsSchema, new SettingsDescribeMirror(ctxWith(scripted.face)))
     await controller.load()
     render(<ModelsSection
+      providerCatalog={true}
       controller={controller}
       useSnapshot={bindSnapshotSelector(controller.store)}
       operations={operationsWith(scripted.face)}

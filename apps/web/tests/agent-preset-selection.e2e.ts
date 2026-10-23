@@ -251,7 +251,7 @@ describe('web e2e: agent-preset selection', () => {
     await rm(fixtureRoot, { recursive: true, force: true })
   })
 
-  it('clears an unapplied hidden pick and creates a Standard session with the roster editable in Settings', async () => {
+  it('clears an unapplied pick and hides preset controls until Developer tools is enabled', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-hero'))
     expect(await livePreset(scaffold)).toBeUndefined()
     await page.getByRole('button', { name: 'Standard mode', exact: true }).click()
@@ -264,7 +264,7 @@ describe('web e2e: agent-preset selection', () => {
     await expect.poll(() => codingTools.getAttribute('aria-checked')).toBe('false')
     await dialog.getByRole('button', { name: 'Close' }).last().click()
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
-    await page.getByRole('button', { name: 'Standard mode', exact: true }).waitFor({ timeout: 10_000 })
+    expect(await page.locator('[data-slot="conversation.hero.agentPreset"] button').count()).toBe(0)
     await expect.poll(() => livePreset(scaffold)).toBe('standard')
 
     await openSettings(page, 'en')
@@ -374,11 +374,7 @@ describe('web e2e: agent-preset selection', () => {
     await dialog.getByRole('button', { name: 'Close' }).last().click()
 
     await expect.poll(() => livePreset(scaffold), { timeout: 15_000 }).toBe('minimal')
-    await page.getByRole('button', { name: 'Minimal mode', exact: true }).click()
-    await page.getByRole('menu').waitFor()
-    expect(await page.getByRole('menuitem', { name: /^PTC mode|^Minimal mode/ }).count()).toBe(0)
-    expect(await page.getByRole('menuitem', { name: /^Standard mode|^Creator mode/ }).count()).toBe(2)
-    await page.keyboard.press('Escape')
+    expect(await page.locator('[data-slot="conversation.hero.agentPreset"] button').count()).toBe(0)
     await expect.poll(async () => (await scaffold.ctx.agentPresets.remoteExportList()).presets.find(preset => preset.isDefault)?.id).toBe('standard')
 
     const creation = page.waitForResponse('**/api/session/create')
@@ -392,13 +388,14 @@ describe('web e2e: agent-preset selection', () => {
     await freshConversation.waitFor()
     await page.reload()
     await freshConversation.waitFor()
-    await page.getByRole('button', { name: 'Standard mode', exact: true }).waitFor()
+    expect(await page.locator('[data-slot="conversation.hero.agentPreset"] button').count()).toBe(0)
 
     await openSettings(page, 'en')
     const reopened = page.getByRole('dialog', { name: 'Settings' })
     await reopened.getByRole('button', { name: 'General', exact: true }).click()
     const reopenedDeveloperTools = reopened.getByRole('switch', { name: 'Show coding view' })
     await expect.poll(() => reopenedDeveloperTools.getAttribute('aria-checked')).toBe('false')
+    expect(await reopened.getByRole('button', { name: 'Agent presets', exact: true }).count()).toBe(0)
     await reopenedDeveloperTools.click()
     await expect.poll(() => reopenedDeveloperTools.getAttribute('aria-checked')).toBe('true')
     await reopened.getByRole('button', { name: 'Agent presets' }).click()
@@ -435,7 +432,7 @@ describe('web e2e: agent-preset selection', () => {
   })
 })
 
-it.each([false, true])('starts Creator from Plugins with Coding Tools=%s without changing drafts or defaults', async (developerTools) => {
+it.each([false, true])('offers Creator from Plugins only with Developer tools enabled (%s)', async (developerTools) => {
   const scaffold = await launchWebScaffold({ developerTools, agentPresets: { default: 'standard' } })
   let browser: Browser | undefined
   try {
@@ -448,12 +445,20 @@ it.each([false, true])('starts Creator from Plugins with Coding Tools=%s without
     const creator = scaffold.ctx.agents.list()[0]
     if (creator === undefined) throw new Error('Connecting the workspace did not create a Session')
     expect(scaffold.ctx.agentPresets.composedPreset(creator.ctx)).toBe('standard')
-    await page.getByRole('button', { name: 'Standard mode', exact: true }).waitFor()
+    if (developerTools) await page.getByRole('button', { name: 'Standard mode', exact: true }).waitFor()
     const composer = page.locator('[data-composer-input][contenteditable="true"]').last()
     const draft = 'Keep this unsent plugin idea.'
     await writeComposerDraft(page, composer, draft)
 
     await page.getByRole('navigation', { name: 'Global panels' }).getByRole('button', { name: 'Plugins', exact: true }).click()
+    if (!developerTools) {
+      await page.getByRole('button', { name: 'Choose how to add a plugin', exact: true }).click()
+      expect(await page.getByRole('menuitem', { name: /^Let the agent create a plugin/ }).count()).toBe(0)
+      await page.keyboard.press('Escape')
+      expect(scaffold.ctx.agentPresets.defaultId).toBe('standard')
+      expect(tripwire.pageErrors).toEqual([])
+      return
+    }
     await page.getByRole('button', { name: 'Choose how to add a plugin', exact: true }).click()
     await Promise.all([
       page.waitForResponse('**/api/agentPresets/select'),

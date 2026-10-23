@@ -209,3 +209,16 @@ describe('projectUserText', () => {
     expect(host.textContent).toBe('纯文本，无引用')
   })
 })
+
+
+it('displays a friendly skill label and icon while opening its canonical skill', () => {
+  const openSkill = vi.fn()
+  const view = render(<div>{projectUserText('$office-docx', [], [], 'skill', { openSkill, openFile: vi.fn() }, [
+    { text: '$office-docx', name: 'office-docx', kind: 'skill', label: 'Word 文档', iconSrc: 'data:image/png;base64,AA==' },
+  ])}</div>)
+  const button = view.getByRole('button', { name: 'Word 文档' })
+  expect(button.title).toBe('$office-docx')
+  expect(button.querySelector('img')).not.toBeNull()
+  fireEvent.click(button)
+  expect(openSkill).toHaveBeenCalledWith('office-docx')
+})

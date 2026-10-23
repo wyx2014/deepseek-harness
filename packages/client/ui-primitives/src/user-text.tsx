@@ -45,6 +45,10 @@ export interface UserTextReference {
   readonly kind: 'skill' | 'mcp' | 'team'
   /** Skill lookup name or connector/team display name. */
   readonly name: string
+  /** Localized display label; lookup and clipboard tokens retain their canonical names. */
+  readonly label?: string
+  /** Decorative image URL supplied by the reference source. */
+  readonly iconSrc?: string
   /** Absolute skill document path, independent of whether the skill is currently enabled. */
   readonly path?: string
 }
@@ -140,7 +144,7 @@ export function projectUserText(
         ? label.replace(/^@"|"$/gu, '').endsWith('/') ? 'folder' : 'file'
         : undefined)
     const displayLabel = reference !== undefined
-      ? reference.kind === 'skill' ? `/${reference.name}` : reference.name
+      ? reference.label ?? (reference.kind === 'skill' ? `/${reference.name}` : reference.name)
       : range.display
       ?? (referenceKind === undefined
         ? label
@@ -148,7 +152,8 @@ export function projectUserText(
           ? label.slice(1)
           : label.slice(1).replace(/^"|"$/gu, '').split(/[\\/]/u).filter(Boolean).at(-1) ?? label.slice(1))
     const contents = <>
-      {referenceKind !== undefined && referenceKind !== 'skill' && (
+      {reference?.iconSrc !== undefined && <img src={reference.iconSrc} alt="" width={16} height={16} className={css.refIcon} />}
+      {reference?.iconSrc === undefined && referenceKind !== undefined && referenceKind !== 'skill' && (
         <ReferenceIconRegular kind={referenceKind} size={16} className={css.refIcon} />
       )}
       {displayLabel}

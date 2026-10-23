@@ -39,6 +39,8 @@ import styles from './ModelsSection.module.css'
 
 /** Injected dependencies of {@link ModelsSection} (slot `inject`). */
 export interface ModelsSectionInjected {
+  /** Whether new providers may be selected from the adapter directory. */
+  providerCatalog: boolean
   /** The page store (loaded on mount, refreshed on pushed invalidations). */
   controller: ModelsSettingsStore
   hooks: {
@@ -221,16 +223,16 @@ export function providerCopy(template: string, target: ProviderIdentity): string
  * @returns the section, or null while the shell has not injected yet.
  */
 export function ModelsSection(props: ModelsSectionProps): ReactNode {
-  const { controller, useSnapshot, operations, schema, t, renderSlot } = props
+  const { controller, useSnapshot, operations, schema, t, renderSlot, providerCatalog } = props
   if (
     controller === undefined || useSnapshot === undefined || operations === undefined
-    || schema === undefined || t === undefined
+    || schema === undefined || t === undefined || providerCatalog === undefined
   ) return null
-  return <Loaded injected={{ controller, useSnapshot, operations, schema, t }} renderSlot={renderSlot} />
+  return <Loaded injected={{ controller, useSnapshot, operations, schema, t, providerCatalog }} renderSlot={renderSlot} />
 }
 
 function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderSlot: ModelsRenderSlot }): ReactNode {
-  const { controller, operations, schema, t } = injected
+  const { controller, operations, schema, t, providerCatalog } = injected
   const snapshot = injected.useSnapshot(value => value)
   const state = { ...snapshot, rows: snapshot.rows.map(row => row.entry.provider === 'deepseek-account'
     ? { ...row, entry: { ...row.entry, displayName: t('deepSeekAccount') } } : row) }
@@ -367,8 +369,8 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
   // the shown mode or has been shown since the card opened — derived, so a
   // refresh that changes which modes are offered can never leave the card
   // without a panel.
-  const catalogOffered = configurable.length > 0
-  const catalogEnabled = addable.length > 0
+  const catalogOffered = providerCatalog && configurable.length > 0
+  const catalogEnabled = catalogOffered && addable.length > 0
   const customOffered = piAi !== undefined
   const customEnabled = protocols.length > 0
   const bothOffered = catalogOffered && customOffered
@@ -534,7 +536,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
         })}
       </ul>
       <div className={styles['addBlock']}>
-        {addOpen
+        {addOpen && (catalogOffered || customOffered)
           ? (
             <div className={styles['addCard']}>
               <div className={styles['addModes']}>
@@ -655,8 +657,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
           )
           : catalogOffered || customOffered
             ? (
-              // One entry for both ways to gain a provider; the card behind it
-              // splits them. Full width, so it lines up with the rows above.
+              // Full width, so the add action lines up with the rows above.
               <div className={styles['addActions']}>
                 <button
                   type="button"
@@ -664,7 +665,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   disabled={!state.writable || state.status !== 'ready' || (!catalogEnabled && !customEnabled)}
                   onClick={() => {
                     if (controller.store.getSnapshot().status !== 'ready') return
-                    const first = addable[0]
+                    const first = catalogEnabled ? addable[0] : undefined
                     const initial: AddMode = catalogEnabled ? 'catalog' : 'custom'
                     setSavedTarget(undefined)
                     setEditing(first === undefined ? undefined : targetOf(first.row))
@@ -674,7 +675,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                   }}
                 >
                   <IconPlusOutlineRegular size={14} />
-                  {t('add')}
+                  {t(providerCatalog ? 'add' : 'addCustomApi')}
                 </button>
               </div>
             )

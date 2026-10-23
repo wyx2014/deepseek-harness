@@ -111,7 +111,9 @@ export function filterOptions(
       group.rows.map(option => ({ name: option.label, option })), query,
     ).map(row => row.option))
   }
-  return ordered.filter(o => o.label.toLowerCase().includes(query) || (o.detail?.toLowerCase().includes(query) ?? false))
+  return ordered.filter(o => o.label.toLowerCase().includes(query)
+    || (o.detail?.toLowerCase().includes(query) ?? false)
+    || (o.keywords?.some(word => word.toLowerCase().includes(query)) ?? false))
 }
 
 /**

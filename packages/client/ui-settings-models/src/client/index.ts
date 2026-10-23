@@ -92,6 +92,7 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS) as ModelsSectionInjected['t']
   const injected = (): ModelsSectionInjected => ({
     controller,
+    providerCatalog: configured.providerCatalog,
     hooks: { snapshot: controller.store },
     operations,
     schema,

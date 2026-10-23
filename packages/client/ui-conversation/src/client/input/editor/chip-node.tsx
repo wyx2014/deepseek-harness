@@ -119,11 +119,12 @@ export class ReferenceChipNode extends DecoratorNode<JSX.Element> {
   override createDOM(_config: EditorConfig): HTMLElement {
     const el = document.createElement('span')
     el.setAttribute('data-composer-chip', this.__source)
+    el.setAttribute('data-reference-ref', this.__ref)
     el.setAttribute('contenteditable', 'false')
     return el
   }
 
-  /** Host element never changes shape. */
+  /** Source and reference identity stay fixed for the lifetime of this node. */
   override updateDOM(): boolean {
     return false
   }

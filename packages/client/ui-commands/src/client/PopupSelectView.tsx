@@ -142,6 +142,7 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
       onClick={() => { void popup.select(index) }}
       onMouseEnter={() => { popup.highlight(index) }}
     >
+      {option.iconSrc !== undefined && <img src={option.iconSrc} alt="" className={css.icon} />}
       <span className={css.label}>
         <span className={css.labelText}>{option.label}</span>
         {option.badge !== undefined && <sup className={css.badge}>{option.badge}</sup>}
