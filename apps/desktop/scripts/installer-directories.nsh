@@ -6,6 +6,8 @@ Var dshOldDirectory
 Var dshOldMoved
 Var dshNewMoved
 
+!include "${__FILEDIR__}\installer-directory-recovery.nsh"
+
 !macro dshExtractPayload FILE
   !ifmacrodef customInstallerExtract
     !insertmacro customInstallerExtract "${FILE}"
@@ -36,6 +38,8 @@ Var dshNewMoved
   ${EndIf}
   StrCpy $dshNewDirectory "$INSTDIR.new-$0"
   StrCpy $dshOldDirectory "$INSTDIR.old-$0"
+  StrCpy $dshDirectoryLog "${DSH_INSTALLER_LOG_DIR}\directory-failure-$0.log"
+  StrCpy $dshDirectoryLogSaved ""
   StrCpy $dshOldMoved ""
   StrCpy $dshNewMoved ""
   ClearErrors
@@ -77,14 +81,23 @@ Function dshRollbackDirectories
     StrCpy $dshNewMoved ""
   ${EndIf}
   ${If} $dshOldMoved == "1"
-    ClearErrors
-    Rename $dshOldDirectory $dshFinalDirectory
-    ${If} ${Errors}
+    StrCpy $dshDirectoryOperation "restore-backup"
+    StrCpy $dshMoveSource $dshOldDirectory
+    StrCpy $dshMoveTarget $dshFinalDirectory
+    Call dshTryMoveDirectory
+    ${If} $dshMoveError != 0
       ; Leave the complete backup in place if another process prevents restoration.
+      Call dshWriteDirectoryReport
       DetailPrint $dshOldDirectory
+      ${IfNot} ${Silent}
+        MessageBox MB_OK|MB_ICONEXCLAMATION "$(INSTALLER_DIRECTORY_RESTORE)$\r$\n$dshOldDirectory$\r$\n$(INSTALLER_DIRECTORY_ERROR) $dshMoveError$\r$\n$dshDirectoryLog" /SD IDOK
+      ${EndIf}
       Return
     ${EndIf}
     StrCpy $dshOldMoved ""
+    ${If} $dshDirectoryLogSaved == "1"
+      Call dshWriteDirectoryReport
+    ${EndIf}
   ${EndIf}
   ${If} $dshNewDirectory != ""
     RMDir /r "\\?\$dshNewDirectory"
@@ -100,7 +113,10 @@ Function dshPromoteDirectories
   SetOutPath $PLUGINSDIR
   ClearErrors
   ${If} ${FileExists} "$dshFinalDirectory\*.*"
-    Rename $dshFinalDirectory $dshOldDirectory
+    StrCpy $dshDirectoryOperation "backup-installation"
+    StrCpy $dshMoveSource $dshFinalDirectory
+    StrCpy $dshMoveTarget $dshOldDirectory
+    Call dshMoveDirectory
     ${If} ${Errors}
       Call dshRollbackDirectories
       SetErrors
@@ -112,7 +128,10 @@ Function dshPromoteDirectories
     RMDir $dshFinalDirectory
   ${EndIf}
   ClearErrors
-  Rename $dshNewDirectory $dshFinalDirectory
+  StrCpy $dshDirectoryOperation "promote-installation"
+  StrCpy $dshMoveSource $dshNewDirectory
+  StrCpy $dshMoveTarget $dshFinalDirectory
+  Call dshMoveDirectory
   ${If} ${Errors}
     Call dshRollbackDirectories
     SetErrors

@@ -1,6 +1,9 @@
 ﻿Add-Type -AssemblyName System.Drawing
 if (-not ('InstallerCapture' -as [type])) {
-    Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
+    $drawingReferences = if ($PSVersionTable.PSEdition -eq 'Core') {
+        @([Drawing.Bitmap].Assembly.Location) + @(Get-ChildItem -LiteralPath (Join-Path $PSHOME 'ref') -Filter '*.dll' | Select-Object -ExpandProperty FullName)
+    } else { @('System.Drawing') }
+    Add-Type -ReferencedAssemblies $drawingReferences -TypeDefinition @'
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -35,9 +38,16 @@ public static class InstallerCapture {
     [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr window);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr window, StringBuilder text, int count);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wparam, string text);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wparam, StringBuilder text);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] public static extern bool SetWindowText(IntPtr window, string text);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     [StructLayout(LayoutKind.Sequential)] struct Rect { public int Left, Top, Right, Bottom; }
+
+    public static string Text(IntPtr window) {
+        var text = new StringBuilder(32768);
+        SendMessage(window, 0xD, new IntPtr(text.Capacity), text);
+        return text.ToString();
+    }
 
     public static string Bounds(IntPtr window) {
         Rect rect;

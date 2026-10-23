@@ -164,6 +164,15 @@ Function InstallerCreate
     ${NSD_OnClick} $InstallerButton InstallerStart
     ${NSD_OnNotify} $InstallerButton InstallerPaintButton
     Call InstallerRender
+    ; Stable native controls for installer automation, independent of localized labels.
+    System::Call 'user32::SetPropW(p $HWNDPARENT, w "HarnessInstaller.PrimaryAction", p $InstallerButton)'
+    System::Call 'user32::SetPropW(p $HWNDPARENT, w "HarnessInstaller.LaunchAction", p $InstallerLaunch)'
+    System::Call 'user32::SetPropW(p $HWNDPARENT, w "HarnessInstaller.PathControl", p $InstallerEdit)'
+    StrCpy $0 1
+    ${If} $InstallerPhase == "success"
+        StrCpy $0 2
+    ${EndIf}
+    System::Call 'user32::SetPropW(p $HWNDPARENT, w "HarnessInstaller.Page", p r0)'
     System::Call 'user32::SetPropW(p $HWNDPARENT, w "HarnessInstaller.Ready", p 1)'
     ShowWindow $InstallerDialog 5
     ShowWindow $HWNDPARENT 5
@@ -171,6 +180,10 @@ Function InstallerCreate
         System::Call '$PLUGINSDIR\window-frame.dll::InstallerPresentWelcome(p $HWNDPARENT) i.r0 ?c'
     ${EndIf}
     nsDialogs::Show
+    System::Call 'user32::SetPropW(p $HWNDPARENT, w "HarnessInstaller.Page", p 0)'
+    System::Call 'user32::RemovePropW(p $HWNDPARENT, w "HarnessInstaller.PrimaryAction")'
+    System::Call 'user32::RemovePropW(p $HWNDPARENT, w "HarnessInstaller.LaunchAction")'
+    System::Call 'user32::RemovePropW(p $HWNDPARENT, w "HarnessInstaller.PathControl")'
     ${NSD_KillTimer} InstallerValidateEditedPath
     ${NSD_FreeImage} $InstallerImage
     ${NSD_FreeImage} $InstallerEditFrameBitmap

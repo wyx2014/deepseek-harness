@@ -1,19 +1,25 @@
 ; Compile against the production directory transaction using a private payload and target.
 Unicode true
 RequestExecutionLevel user
-SilentInstall silent
+!ifdef INTERACTIVE
+  SilentInstall normal
+  AutoCloseWindow true
+  Page instfiles
+!else
+  SilentInstall silent
+!endif
 Name "Desktop directory replacement smoke"
 OutFile "${OUTPUT_FILE}"
 LoadLanguageFile "${NSISDIR}\Contrib\Language files\English.nlf"
+LoadLanguageFile "${NSISDIR}\Contrib\Language files\SimpChinese.nlf"
+!include "..\..\installer\strings.nsh"
+!define DSH_INSTALLER_LOG_DIR "${REPORT_DIR}"
 LangString decompressionFailed ${LANG_ENGLISH} "Payload extraction failed"
 
 !macro installApplicationFiles
   !insertmacro dshExtractPayload "${PAYLOAD_FILE}"
 !macroend
 !ifdef SOURCE_DLL
-  LoadLanguageFile "${NSISDIR}\Contrib\Language files\SimpChinese.nlf"
-  !include "..\..\installer\strings.nsh"
-  !define DSH_INSTALLER_LOG_DIR "${REPORT_DIR}"
   !include "..\..\scripts\installer.nsh"
 !else
   !include "..\..\scripts\installer-directories.nsh"
@@ -34,6 +40,21 @@ Section
   !ifdef MISSING_STAGE
     ; A missing source makes the second rename fail after the old directory moved.
     RMDir /r "\\?\$dshNewDirectory"
+  !endif
+  !ifdef LOCKED_STAGE
+    FileOpen $0 "$dshNewDirectory\stage-ready.txt" w
+    FileClose $0
+    ; The test acquires a handle in the staged payload before allowing promotion.
+    StrCpy $0 0
+    ${DoWhile} ${FileExists} "$dshNewDirectory\stage-ready.txt"
+      Sleep 25
+      IntOp $0 $0 + 1
+      ${If} $0 > 1200
+        SetErrorLevel 3
+        Call dshCleanupDirectories
+        Quit
+      ${EndIf}
+    ${Loop}
   !endif
   Call dshPromoteDirectories
   IfErrors failed
