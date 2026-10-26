@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url'
 import { resolveLinuxNodePtyAddon, resolveWindowsNodePtyAddons } from './executable-native-pty.ts'
 import { officeSidecarArchives, runtimeNpmArchive, OFFICE_ASSET_IGNORES } from './build-exe-for-python-sdk-office.ts'
 import { deduplicateStagedWorkspacePackages, materializeStagedLinks } from './build-exe-for-python-sdk-staging.ts'
-import { prepareOfficeSkillAssets } from './primary-runtime/prepare.ts'
+import { prepareOfficeSkillAssets, primaryRuntimePayloadDigest, type PrimaryRuntimeTarget } from './primary-runtime/prepare.ts'
 import primaryLock from './primary-runtime/lock.json' with { type: 'json' }
 
 const root = resolve(import.meta.dirname, '..')
@@ -375,6 +375,8 @@ class SingleExeBuild {
     } finally {
       for (const entry of Object.values(entries)) await rm(entry, { force: true })
     }
+    // The bundled resource helper resolves this launcher beside primary-runtime.mjs.
+    await copyFile(join(root, 'scripts/primary-runtime/pnpm-entry.mjs'), join(this.staging, 'pnpm-entry.mjs'))
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>
     await writeFile(manifestPath, `${JSON.stringify({ ...manifest, ...patch }, null, 2)}\n`)
     await this.run('resource helper imports', process.execPath, ['--input-type=module', '--eval',
@@ -417,7 +419,8 @@ class SingleExeBuild {
       const office = await officeSidecarArchives(this.staging, { platform, arch: target.arch })
       const pnpm = await runtimeNpmArchive('pnpm', packageManager.replace('pnpm@', ''))
       const inputs = { version, target: `${target.platform === 'macos' ? 'mac' : target.platform}-${target.arch}`, office, pnpm }
-      const identity = createHash('sha256').update(JSON.stringify({ ...inputs, primaryLock })).digest('hex')
+      const payloadDigest = primaryRuntimePayloadDigest(inputs.target as PrimaryRuntimeTarget, primaryLock, pnpm.version)
+      const identity = createHash('sha256').update(JSON.stringify({ ...inputs, primaryLock, payloadDigest })).digest('hex')
       await writeFile(join(resources, 'downloads.json'), JSON.stringify({ ...inputs, identity }, undefined, 2) + '\n')
       await prepareOfficeSkillAssets(join(this.staging, 'node_modules/@deepseek-ai/dsh-skill-office/assets'), join(resources, 'office-skills'))
     }

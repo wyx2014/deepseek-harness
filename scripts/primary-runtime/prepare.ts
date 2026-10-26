@@ -2,7 +2,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { cp } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -125,7 +125,7 @@ export function primaryRuntimePayloadDigest(
   // Identity preserves key order within the selected target, wheel records and distribution map, plus wheel-entry order.
   // Bump format when extraction or assembly changes payload bytes without changing locked inputs.
   return createHash('sha256').update(JSON.stringify({
-    format: 6, target, pythonVersion, pythonRelease, nodeVersion: pnpmVersion === undefined ? undefined : nodeVersion,
+    format: 7, target, pythonVersion, pythonRelease, nodeVersion: pnpmVersion === undefined ? undefined : nodeVersion,
     artifact: runtimeLock.targets[target], wheels, pythonPackages, pnpm: pnpmVersion,
   })).digest('hex')
 }
@@ -157,6 +157,18 @@ export async function unpackPrimaryRuntimeWheel(archive: string, destination: st
 export async function prepareOfficeSkillAssets(source: string, destination: string): Promise<void> {
   rmSync(destination, { recursive: true, force: true })
   await cp(source, destination, { recursive: true, dereference: true })
+}
+
+/**
+ * Install the bundled pnpm launcher that tolerates transient Windows rename locks.
+ * @param directory - Copied pnpm distribution, before signing or payload hashing.
+ * @returns Resolves after preserving upstream's launcher and installing the adapter.
+ */
+export async function prepareRuntimePnpm(directory: string): Promise<void> {
+  const entry = join(directory, 'bin', 'pnpm.mjs')
+  renameSync(entry, join(directory, 'bin', 'pnpm-vendor.mjs'))
+  await cp(new URL('./pnpm-entry.mjs', import.meta.url), entry)
+  chmodSync(entry, 0o755)
 }
 
 /** A locked interpreter and wheel target. */
@@ -209,6 +221,7 @@ export async function preparePrimaryRuntime(options: PreparePrimaryRuntimeOption
         pnpmVersion = (JSON.parse(readFileSync(pnpmManifest, 'utf8')) as { version: string }).version
         await cp(dirname(pnpmManifest), join(dependencies, 'pnpm'), { recursive: true, dereference: true })
       }
+      await prepareRuntimePnpm(join(dependencies, 'pnpm'))
     }
     await extractTar({ file: await pythonArchive(target, paths.downloads), cwd: dependencies })
     const manifest: PrimaryRuntimeManifest = {
