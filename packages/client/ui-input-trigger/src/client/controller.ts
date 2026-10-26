@@ -221,7 +221,8 @@ export class InputTriggerController {
     if (this.disposed || !state.open || hit === null) return
     const group = state.groups.find(g => g.source === source)
     const candidate = group !== undefined && group.status === 'ready' ? group.items[index] : undefined
-    if (candidate === undefined) return
+    // A disabled row explains itself in place; picking it changes nothing.
+    if (candidate === undefined || candidate.disabled === true) return
     const src = this.deps.roster.sources(hit.trigger).find(s => s.name === source)
     if (src === undefined) return
     this.settle(src, candidate, hit, action)
@@ -295,6 +296,7 @@ export class InputTriggerController {
         // falls through to submit — an explicit no-op until the group is ready.
         const group = state.groups.find(g => g.source === state.highlight?.source)
         if (group === undefined || group.status !== 'ready') return 'consumed'
+        if (group.items[state.highlight.index]?.disabled === true) return 'consumed'
         this.pick(state.highlight.source, state.highlight.index)
         return 'pick-highlighted'
       }
@@ -306,6 +308,7 @@ export class InputTriggerController {
         if (group === undefined || group.status !== 'ready') return 'consumed'
         const item = group.items[state.highlight.index]
         if (item === undefined) return 'pass'
+        if (item.disabled === true) return 'consumed'
         if (item.drill === true) {
           this.pick(state.highlight.source, state.highlight.index, 'drill')
           return 'consumed'

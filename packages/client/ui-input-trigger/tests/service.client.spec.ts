@@ -173,6 +173,33 @@ describe('registerSource', () => {
   })
 })
 
+describe('registerPresenter', () => {
+  it('chains presenters per source in order, contains failures, and re-polls open menus on change', async () => {
+    const { inputTriggers, mint } = await serviceBench()
+    const candidates = vi.fn((session: ClientSessionContext) =>
+      Promise.resolve(inputTriggers.present('/', 'skill', session, [{ name: 'a' }, { name: 'b' }])))
+    inputTriggers.registerSource({ trigger: '/', name: 'skill', candidates, onPick: () => undefined })
+    const controller = inputTriggers.sessionOf(mint('a').actx)
+    controller.track('/', 1, { tier: 'plain' }, 1)
+    await tick()
+    expect(controller.menu.getSnapshot().groups[0]!.items).toEqual([{ name: 'a' }, { name: 'b' }])
+
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const disposeReverse = inputTriggers.registerPresenter('/', 'skill', (_session, rows) => [...rows].reverse())
+    inputTriggers.registerPresenter('/', 'skill', (_session, rows) => rows.map(row => ({ ...row, label: row.name.toUpperCase() })))
+    inputTriggers.registerPresenter('/', 'skill', () => { throw new Error('broken') })
+    // Another source's presenters never apply here.
+    inputTriggers.registerPresenter('/', 'command', () => [])
+    await tick()
+    expect(controller.menu.getSnapshot().groups[0]!.items).toEqual([{ name: 'b', label: 'B' }, { name: 'a', label: 'A' }])
+    expect(error).toHaveBeenCalledWith('[ui-input-trigger] presenter for "/skill" failed:', expect.any(Error))
+
+    disposeReverse()
+    await tick()
+    expect(controller.menu.getSnapshot().groups[0]!.items).toEqual([{ name: 'a', label: 'A' }, { name: 'b', label: 'B' }])
+  })
+})
+
 describe('sessionOf', () => {
   it('resolves lazily: same scope → same resident controller; another session → its own', async () => {
     const { inputTriggers, mint } = await serviceBench()
@@ -962,6 +989,18 @@ describe('arbitrate', () => {
     expect(controller.arbitrate('enter', false)).toBe('pick-highlighted')
     expect(cmd.picks[0]!.candidate.name).toBe('goal')
     expect(controller.menu.getSnapshot().open).toBe(false)
+  })
+
+  it('a disabled row stays open under pointer, Enter and Tab picks', async () => {
+    const skill = readySource('/', 'skill', [{ name: 'custom', description: 'Not installed', disabled: true }])
+    const { controller } = controllerBench([skill.source])
+    controller.track('/c', 2, { tier: 'plain' }, 1)
+    await tick()
+    controller.pick('skill', 0)
+    expect(controller.arbitrate('enter', false)).toBe('consumed')
+    expect(controller.arbitrate('tab', false)).toBe('consumed')
+    expect(skill.picks).toHaveLength(0)
+    expect(controller.menu.getSnapshot().open).toBe(true)
   })
 
   it('escape and shift+tab leave without picking, and the exit sticks', async () => {

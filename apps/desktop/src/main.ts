@@ -1072,7 +1072,7 @@ async function main(): Promise<void> {
           shortcuts.sendEditingKey(keyCode, modifiers)
         },
       })
-      const items: MenuItemConstructorOptions[] = name === 'application' ? applicationItems() : [
+      const items: MenuItemConstructorOptions[] = name === 'application' ? applicationItems().filter(item => ![currentDesktopLocale().messages.checkUpdatesMenu, currentDesktopLocale().messages.cliCommandMenu].includes(item.label ?? '')).filter((item, index, items) => item.type !== 'separator' || (index > 0 && index < items.length - 1 && items[index - 1]?.type !== 'separator')) : [
         editItem(currentDesktopLocale().messages.undo, 'Z', ['control'], 'Ctrl+Z'),
         editItem(currentDesktopLocale().messages.redo, 'Y', ['control'], 'Ctrl+Y'),
         { type: 'separator' },

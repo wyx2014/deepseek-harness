@@ -15,7 +15,7 @@
 import { MenuSurface } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import clsx from 'clsx'
-import { IconChevronRightOutlineRegular, ReferenceIconRegular, useAnchoredMaxHeight } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCheckOutlineRegular, IconChevronRightOutlineRegular, ReferenceIconRegular, useAnchoredMaxHeight } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './MenuView.module.css'
 import type { MenuViewInjected } from './slots.ts'
@@ -151,7 +151,10 @@ export function MenuView({ menu, headers, onPick, onCrumb, onHover, onDismiss, t
                     <div className={css.skeletonRow}><span className={css.skeletonBar} style={{ width: '48%' }} /></div>
                   </div>
                 )
-                : group.items.map((item, index) => {
+                : group.items.map((item, index, items) => {
+                  // Image icons mark a product-presented group: every row takes the
+                  // popup-select layout (media seat, title then description, trailing check).
+                  const media = items.some(row => row.iconSrc !== undefined)
                   const active = highlight !== null && highlight.source === group.source && highlight.index === index
                   return (
                     <Fragment key={optionId(group.source, index)}>
@@ -163,6 +166,8 @@ export function MenuView({ menu, headers, onPick, onCrumb, onHover, onDismiss, t
                         type="button"
                         role="option"
                         aria-selected={active}
+                        aria-disabled={item.disabled === true || undefined}
+                        data-media={media || undefined}
                         className={clsx(css.item, active && css.active)}
                         // mousedown, not click: the textarea keeps focus (combobox
                         // pattern) — preventing default stops the focus steal, and the
@@ -176,7 +181,8 @@ export function MenuView({ menu, headers, onPick, onCrumb, onHover, onDismiss, t
                         // pointer must not steal it back.
                         onMouseMove={active ? undefined : () => { onHover(group.source, index) }}
                       >
-                        {item.icon !== undefined && (
+                        {item.iconSrc !== undefined && <img src={item.iconSrc} alt="" className={css.itemImage} />}
+                        {item.iconSrc === undefined && item.icon !== undefined && (
                           <span className={css.itemIcon} aria-hidden>
                             {typeof item.icon === 'string'
                               ? <ReferenceIconRegular kind={item.icon} size={14} />
@@ -184,10 +190,11 @@ export function MenuView({ menu, headers, onPick, onCrumb, onHover, onDismiss, t
                           </span>
                         )}
                         <span className={css.itemName}>{item.label ?? item.name}</span>
-                        {item.label !== undefined && item.label.toLowerCase() !== item.name.toLowerCase() && (
+                        {!media && item.label !== undefined && item.label.toLowerCase() !== item.name.toLowerCase() && (
                           <span className={css.itemAlias}>{item.name}</span>
                         )}
                         {item.description !== undefined && <span className={css.itemDescription}>{item.description}</span>}
+                        {item.active === true && <span className={css.check} aria-hidden><IconCheckOutlineRegular /></span>}
                         {item.drill === true && (
                           <span className={css.trailing}>
                             {/* Visual hint only: Tab drills the highlighted row (the

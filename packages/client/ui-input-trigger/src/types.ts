@@ -59,6 +59,14 @@ export interface InputTriggerCandidate {
   readonly description?: string
   /** Reference glyph token, or an icon component from the shared icon set. */
   readonly icon?: InputTriggerCandidateIcon | ComponentType<IconProps>
+  /** Image icon URL; replaces `icon` and renders the row with a media leading seat. */
+  readonly iconSrc?: string
+  /** Extra search keys (aliases) for sources that rank with `rankByName`. */
+  readonly keywords?: readonly string[]
+  /** Shown but not pickable; `description` carries the reason. */
+  readonly disabled?: boolean
+  /** Already selected; the row shows a trailing check. */
+  readonly active?: boolean
   readonly hint?: string
   /** Optional visual heading shared by adjacent candidates; sectioned groups omit their source-title row. */
   readonly section?: string
@@ -240,6 +248,19 @@ export interface InputTriggerSource {
   /** Reference codec; required for sources producing insert outcomes. */
   readonly codec?: ReferenceCodec
 }
+
+/**
+ * Product presentation of one source's candidates: relabels, decorates, reorders
+ * or drops rows. Synchronous over hot state; sources that opt in apply it before
+ * ranking so the presented labels and keywords are searchable.
+ * @param session - stable session projection.
+ * @param candidates - the source's rows in its own order.
+ * @returns the presented rows.
+ */
+export type InputTriggerPresenter = (
+  session: ClientSessionContext,
+  candidates: readonly InputTriggerCandidate[],
+) => readonly InputTriggerCandidate[]
 
 /** Trigger availability tier, derived from the input phase by the wiring layer. */
 export interface TriggerGuard {

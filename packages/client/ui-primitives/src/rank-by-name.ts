@@ -62,12 +62,12 @@ function alignmentScore(name: string, query: string): number | undefined {
  * Rank named items by a menu query.
  * @param items - candidates in source order (a host catalog, then client
  * contributions); an item's optional `label` is a second search key beside
- * its name.
+ * its name, and its optional `keywords` (aliases) search after both.
  * @param rawQuery - the text typed after the trigger, matched case-insensitively.
  * @returns the matching items: prefix hits first, then by alignment score,
  * then in source order. The input list itself for an empty query.
  */
-export function rankByName<T extends { readonly name: string; readonly label?: string }>(
+export function rankByName<T extends { readonly name: string; readonly label?: string; readonly keywords?: readonly string[] }>(
   items: readonly T[],
   rawQuery: string,
 ): readonly T[] {
@@ -75,7 +75,7 @@ export function rankByName<T extends { readonly name: string; readonly label?: s
   if (query === '') return items
   const ranked: Ranked<T>[] = []
   items.forEach((item, index) => {
-    const keys = item.label === undefined ? [item.name] : [item.name, item.label]
+    const keys = [item.name, ...(item.label === undefined ? [] : [item.label]), ...(item.keywords ?? [])]
     let prefix = false
     let score: number | undefined
     for (const key of keys) {

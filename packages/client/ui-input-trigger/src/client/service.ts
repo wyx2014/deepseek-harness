@@ -11,7 +11,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions, SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
 import { WeakMapWithValues } from '@deepseek-ai/dsh-util-values'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { InputTriggerSource } from '../types.ts'
+import type { ClientSessionContext, InputTriggerCandidate, InputTriggerPresenter, InputTriggerSource, TriggerChar } from '../types.ts'
 import { InputTriggerController } from './controller.ts'
 import type { InputTriggerServiceContract } from './contract.ts'
 
@@ -23,6 +23,8 @@ import type { InputTriggerServiceContract } from './contract.ts'
 interface LiveState {
   /** Registration order = menu group order = matchSpace/matchEnter poll order. */
   readonly sources: InputTriggerSource[]
+  /** Product presenters keyed `<trigger><source>`, in registration order. */
+  readonly presenters: Map<string, InputTriggerPresenter[]>
   /** Per-session controllers; entries are deleted by their scope disposer. */
   readonly controllers: WeakMapWithValues<SessionBinding, InputTriggerController>
 }
@@ -32,7 +34,7 @@ export class InputTriggerService extends Service implements InputTriggerServiceC
   static inject = ['sessions']
 
   private readonly live: LiveState = {
-    sources: [], controllers: new WeakMapWithValues(),
+    sources: [], presenters: new Map(), controllers: new WeakMapWithValues(),
   }
 
   /**
@@ -74,6 +76,55 @@ export class InputTriggerService extends Service implements InputTriggerServiceC
       live.sources.splice(at, 1)
       for (const controller of live.controllers.values) controller.sourceRemoved(src)
     }
+  }
+
+  /**
+   * Register a product presenter for one source's candidates.
+   * @param trigger - the source's trigger character.
+   * @param source - the source name.
+   * @param presenter - synchronous candidate presentation.
+   * @returns the disposer; open menus re-poll so the change shows at once.
+   */
+  registerPresenter(trigger: TriggerChar, source: string, presenter: InputTriggerPresenter): () => void {
+    const { live } = this
+    const key = `${trigger}${source}`
+    const list = live.presenters.get(key) ?? []
+    list.push(presenter)
+    live.presenters.set(key, list)
+    for (const controller of live.controllers.values) controller.refreshOpenMenu()
+    return () => {
+      const at = list.indexOf(presenter)
+      if (at < 0) return
+      list.splice(at, 1)
+      if (list.length === 0) live.presenters.delete(key)
+      for (const controller of live.controllers.values) controller.refreshOpenMenu()
+    }
+  }
+
+  /**
+   * Apply the registered presenters of one source.
+   * @param trigger - the source's trigger character.
+   * @param source - the source name.
+   * @param session - stable session projection.
+   * @param candidates - the source's rows before ranking.
+   * @returns the presented rows; a throwing presenter leaves its input unchanged.
+   */
+  present(
+    trigger: TriggerChar,
+    source: string,
+    session: ClientSessionContext,
+    candidates: readonly InputTriggerCandidate[],
+  ): readonly InputTriggerCandidate[] {
+    let rows = candidates
+    for (const presenter of [...(this.live.presenters.get(`${trigger}${source}`) ?? [])]) {
+      try {
+        rows = presenter(session, rows)
+      } catch (error) {
+        // Presentation is cosmetic: a faulty product presenter must not empty the menu.
+        console.error(`[ui-input-trigger] presenter for "${trigger}${source}" failed:`, error)
+      }
+    }
+    return rows
   }
 
   /**

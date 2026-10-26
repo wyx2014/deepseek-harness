@@ -1,6 +1,6 @@
 import { officePackageDirectories } from '../../../scripts/libreoffice-packages.mjs'
 import { X509Certificate } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -43,6 +43,24 @@ import {
  * @param {string | undefined} preparedRuntimeVersion - Version that private tree declares, which qualification rewrites away from the product version.
  * @returns {object} electron-builder configuration.
  */
+/**
+ * Disk-image window layout around an optional branded background (resources/dmg-background.png, with @2x).
+ * @returns dmg options; empty without the background, keeping electron-builder's default window.
+ */
+function diskImageLayout() {
+  const background = fileURLToPath(new URL('../resources/dmg-background.png', import.meta.url))
+  if (!existsSync(background)) return {}
+  return {
+    background,
+    iconSize: 96,
+    window: { width: 540, height: 380 },
+    contents: [
+      { x: 140, y: 214 },
+      { x: 400, y: 214, type: 'link', path: '/Applications' },
+    ],
+  }
+}
+
 export function createElectronBuilderConfig(
   env = process.env,
   hostPlatform = process.platform,
@@ -112,6 +130,8 @@ export function createElectronBuilderConfig(
     extraMetadata: {
       ...(env.DSH_DESKTOP_PRODUCT_NAME === undefined ? {} : { productName }),
       dshDesktopAppId: appId,
+      // deb and rpm record a project homepage; without one electron-builder falls back to the GitHub remote.
+      ...(env.DSH_DESKTOP_HOMEPAGE === undefined ? {} : { homepage: env.DSH_DESKTOP_HOMEPAGE }),
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
@@ -179,6 +199,7 @@ export function createElectronBuilderConfig(
     dmg: {
       sign: !unsigned,
       writeUpdateInfo: false,
+      ...diskImageLayout(),
     },
     beforePack: async context => {
       const office = await officePackageDirectories(buildPaths.dsh, { platform: resolvedPlatform, arch: resolvedArch })
@@ -245,8 +266,17 @@ export function createElectronBuilderConfig(
     },
     linux: {
       category: 'Development',
-      target: ['AppImage'],
+      target: ['AppImage', 'deb', 'rpm'],
+      icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
+      // A stable lowercase name keeps Exec, Icon and the hicolor icon file aligned; a scoped package name does not.
+      executableName: artifactPrefix,
+      synopsis: productName,
+      maintainer: env.DSH_DESKTOP_LINUX_MAINTAINER ?? productName,
+      desktop: { entry: { Name: productName, StartupWMClass: productName } },
     },
+    deb: { packageName: artifactPrefix },
+    // Electron needs libgbm and ALSA, which the builder's default RPM requirements omit.
+    rpm: { packageName: artifactPrefix, fpm: ['-d', 'mesa-libgbm', '-d', 'alsa-lib'] },
     nsis: {
       installerSidebar: join(buildPaths.root, 'installer-ui', 'uninstaller-sidebar.bmp'),
       uninstallerSidebar: join(buildPaths.root, 'installer-ui', 'uninstaller-sidebar.bmp'),

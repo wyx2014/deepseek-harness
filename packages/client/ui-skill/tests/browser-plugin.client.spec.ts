@@ -20,7 +20,7 @@ import { InputTriggerService } from '@deepseek-ai/dsh-client-ui-input-trigger/cl
 import { RemoteError, TestRemote, TestSessions } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionFixture } from '@deepseek-ai/dsh-client-test-runtime'
 import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
-import type { ClientSessionContext, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import type { ClientSessionContext, InputTriggerCandidate, InputTriggerPresenter, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { apply, inject } from '../src/client/index.ts'
 import { SkillRow as SkillToolRow } from '../src/client/SkillRow.tsx'
 
@@ -60,12 +60,16 @@ function providePresentation(ctx: Context): PresentationCapture {
 }
 
 /** Boot the plugin over fake slash/connection faces; returns the captured source and its ctx. */
-async function bench(list: ListFn, addressed?: SessionId, opening: Pick<SessionFixture, 'initialOpen' | 'snapshot'> = {}) {
+async function bench(list: ListFn, addressed?: SessionId, opening: Pick<SessionFixture, 'initialOpen' | 'snapshot'> = {}, presenter?: InputTriggerPresenter) {
   const ctx = new Context()
   const openResource = vi.fn()
   ctx.provide('sidebarRight', { openResource })
   let captured: InputTriggerSource | undefined
-  ctx.provide('inputTriggers', { registerSource: (src: InputTriggerSource) => { captured = src; return () => {} } })
+  ctx.provide('inputTriggers', {
+    registerSource: (src: InputTriggerSource) => { captured = src; return () => {} },
+    present: (trigger: string, name: string, session: ClientSessionContext, rows: readonly InputTriggerCandidate[]) =>
+      presenter !== undefined && trigger === '/' && name === 'skill' ? presenter(session, rows) : rows,
+  })
   const sessions = new TestSessions(async (action) => { await action() }, ctx)
   ctx.provide('sessions', sessions)
   onTestFinished(async () => {
@@ -454,6 +458,23 @@ describe('user-only marking', () => {
       { name: 'shared-skill', description: 'both surfaces' },
       { name: 'user-only-skill', description: '仅用户 · user surface only' },
     ])
+  })
+})
+
+describe('product presentation', () => {
+  it('presents rows before ranking, so presented labels and keywords are searchable', async () => {
+    const presenter = vi.fn((_session: ClientSessionContext, rows: readonly InputTriggerCandidate[]) => [...rows].reverse()
+      .map(row => row.name === 'deploy' ? { ...row, label: '发布', keywords: ['ship'], iconSrc: 'data:deploy' } : row))
+    const { source } = await bench(listOk(CATALOG), undefined, {}, presenter)
+    await expect(source.candidates(proj('s1'), req(''))).resolves.toEqual([
+      { name: 'deploy', description: 'deploy flow', label: '发布', keywords: ['ship'], iconSrc: 'data:deploy' },
+      { name: 'code-review', description: 'review flow' },
+      { name: 'commit-helper', description: 'commit flow' },
+    ])
+    const names = async (query: string) => (await source.candidates(proj('s1'), req(query))).map(c => c.name)
+    await expect(names('发布')).resolves.toEqual(['deploy'])
+    await expect(names('ship')).resolves.toEqual(['deploy'])
+    expect(presenter).toHaveBeenCalledWith({ sessionId: 's1' }, expect.any(Array))
   })
 })
 

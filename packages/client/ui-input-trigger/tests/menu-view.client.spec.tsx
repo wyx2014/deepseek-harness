@@ -134,6 +134,31 @@ describe('MenuView', () => {
     expect(screen.getAllByText('添加')).toHaveLength(1)
   })
 
+  it('renders an image-icon group in the popup-select layout: media, title, caption, check, and inert disabled rows', () => {
+    const { onPick } = mount(openState({
+      groups: [{
+        source: 'skill',
+        status: 'ready',
+        items: [
+          { name: 'office-xlsx', label: '电子表格', description: '创建和编辑表格', iconSrc: 'data:image/svg+xml,x', active: true },
+          { name: 'custom', label: 'custom-skill', description: '未安装', disabled: true },
+        ],
+      }],
+      highlight: { source: 'skill', index: 0 },
+    }))
+    const options = screen.getAllByRole('option')
+    // A presented label never shows the canonical name as an alias.
+    expect(options.map(o => o.textContent)).toEqual(['电子表格创建和编辑表格', 'custom-skill未安装'])
+    expect(options.every(o => o.hasAttribute('data-media'))).toBe(true)
+    expect(options[0]?.querySelector('img')?.getAttribute('src')).toBe('data:image/svg+xml,x')
+    expect(options[0]?.querySelector('svg')).not.toBeNull()
+    expect(options[1]?.getAttribute('aria-disabled')).toBe('true')
+    expect(options[1]?.querySelector('img, svg')).toBeNull()
+    // The view still routes the pointer; the controller refuses the disabled pick.
+    fireEvent.mouseDown(options[1]!)
+    expect(onPick).toHaveBeenCalledWith('skill', 1)
+  })
+
   it('keeps an opted-out source title hidden while its candidates are pending', () => {
     mount(openState({
       groups: [{ source: 'reference', showGroupTitle: false, status: 'pending', items: [] }],

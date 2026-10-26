@@ -135,6 +135,43 @@
   line-height: 18px;
 }
 
+/* Product-presented rows (an image icon) take the popupSelect row of the
+   composer's Add menu: 24px media, title then a left-aligned caption, and a
+   trailing check for selected rows. */
+.item[data-media] {
+  padding: 5px 7px;
+  font-size: 12px;
+}
+
+.item[data-media] .itemDescription {
+  text-align: left;
+  font-size: 11px;
+}
+
+.item[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.itemImage {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex: none;
+}
+
+.check {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+  color: var(--dsw-alias-label-primary);
+}
+
+.check svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Trailing seat on drillable rows (directories): the Tab keycap hint plus the
    drill chevron, revealed while the row holds the shared highlight. */
 .trailing {

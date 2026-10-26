@@ -1,5 +1,5 @@
 import { tmpdir } from 'node:os'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { Arch, Platform } from 'electron-builder'
 import { Packager } from 'app-builder-lib'
 import { describe, expect, it, vi } from 'vitest'
@@ -22,6 +22,26 @@ describe('installer preparation preserves application dependencies', () => {
     expect(config.win.forceCodeSigning).toBe(false)
     expect(() => createElectronBuilderConfig({ ...env, DSH_DESKTOP_UNSIGNED: '0' }, 'win32', 'x64')).toThrow(/unsigned Windows product/u)
   })
+  it('lays out a branded disk image and names Linux packages after the product', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const config = createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.product', DSH_DESKTOP_UNSIGNED: '1',
+      DSH_DESKTOP_PRODUCT_NAME: 'Example Cowork', DSH_DESKTOP_ARTIFACT_PREFIX: 'example-cowork',
+      DSH_DESKTOP_HOMEPAGE: 'https://example.com/cowork' }, 'darwin', 'arm64')
+    // The background is product artwork; without it the builder keeps its default window.
+    if (existsSync(new URL('../resources/dmg-background.png', import.meta.url))) {
+      expect(config.dmg).toMatchObject({ iconSize: 96, window: { width: 540, height: 380 },
+        contents: [{ x: 140, y: 214 }, { x: 400, y: 214, type: 'link', path: '/Applications' }] })
+      expect(config.dmg.background).toMatch(/dmg-background\.png$/u)
+    } else {
+      expect(config.dmg).not.toHaveProperty('background')
+    }
+    expect(config.extraMetadata.homepage).toBe('https://example.com/cowork')
+    expect(config.linux).toMatchObject({ target: ['AppImage', 'deb', 'rpm'], executableName: 'example-cowork',
+      maintainer: 'Example Cowork', desktop: { entry: { Name: 'Example Cowork' } } })
+    expect(readFileSync(config.linux.icon)).toEqual(readFileSync(new URL('../resources/icon-macos.png', import.meta.url)))
+    expect(config.deb).toEqual({ packageName: 'example-cowork' })
+    expect(config.rpm).toEqual({ packageName: 'example-cowork', fpm: ['-d', 'mesa-libgbm', '-d', 'alsa-lib'] })
+  }, 30_000)
   it.each(['win32', 'darwin'] as const)('rejects a missing production policy before signing on %s', async (platform) => {
     const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
     expect(() => createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.installer',

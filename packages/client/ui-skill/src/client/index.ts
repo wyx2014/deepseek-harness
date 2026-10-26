@@ -155,6 +155,7 @@ export function apply(ctx: ClientContext): void {
   // locale service's own fallback ladder; candidate-time reads stay plain text.
   const t = ctx.locale.bind(NS)
 
+  const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   const source: InputTriggerSource = {
     trigger: '/',
     name: 'skill',
@@ -165,15 +166,16 @@ export function apply(ctx: ClientContext): void {
       const skills = await fetchCatalog(session.sessionId).promise
       // Superseded keystroke: the shared fetch stays warm, this caller yields.
       if (signal.aborted) return []
-      // The same ranking as the command group of this menu: case-insensitive
-      // ordered subsequence, prefix hits first.
-      return rankByName(skills, query)
-        .map(skill => ({
-          name: skill.name,
-          // The user-only marker rides the description (the menu's only
-          // secondary text); `hint` is the claim-state ghost text, not a badge.
-          description: skill.modelInvocable ? skill.description : `${t('menu.userOnly')} · ${skill.description}`,
-        }))
+      const rows = skills.map(skill => ({
+        name: skill.name,
+        // The user-only marker rides the description (the menu's only
+        // secondary text); `hint` is the claim-state ghost text, not a badge.
+        description: skill.modelInvocable ? skill.description : `${t('menu.userOnly')} · ${skill.description}`,
+      }))
+      // Product presentation runs before ranking so its labels and keywords
+      // are searchable; then the same ranking as the command group of this
+      // menu: case-insensitive ordered subsequence, prefix hits first.
+      return rankByName(inputTriggers.present('/', 'skill', session, rows), query)
     },
     warm(session) {
       // Fire-and-forget scope-birth prewarm; the shared fetch reports
@@ -220,7 +222,6 @@ export function apply(ctx: ClientContext): void {
       } }
     },
   }
-  const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   // A preset decides which skill providers an agent reads, so a switched
   // session's cached catalog belongs to the composition it no longer runs.
   ctx.remote.$on('agent-preset/selected', invalidate)
