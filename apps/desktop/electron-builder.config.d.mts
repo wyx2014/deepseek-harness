@@ -17,7 +17,7 @@ export interface DesktopElectronBuilderConfig {
     { readonly from: string, readonly to: 'dsh/node_modules', readonly filter: readonly ['**/*'] },
   ]
   readonly productName: string
-  readonly extraMetadata: { readonly dshDesktopAppId: string; readonly productName?: string }
+  readonly extraMetadata: { readonly dshDesktopAppId: string; readonly productName?: string; readonly homepage?: string }
   readonly asarUnpack: readonly string[]
   readonly extraResources: readonly [
     { readonly from: string, readonly to: 'runtime' },
@@ -36,6 +36,13 @@ export interface DesktopElectronBuilderConfig {
   readonly dmg: {
     readonly sign: boolean
     readonly writeUpdateInfo: boolean
+    readonly background?: string
+    readonly iconSize?: number
+    readonly window?: { readonly width: number; readonly height: number }
+    readonly contents?: readonly [
+      { readonly x: number; readonly y: number },
+      { readonly x: number; readonly y: number; readonly type: 'link'; readonly path: '/Applications' },
+    ]
   }
   readonly win: {
     readonly icon: string
@@ -46,6 +53,17 @@ export interface DesktopElectronBuilderConfig {
       readonly signingHashAlgorithms: readonly string[]
     }
   }
+  readonly linux: {
+    readonly category: 'Development'
+    readonly target: readonly ['AppImage', 'deb', 'rpm']
+    readonly icon: string
+    readonly executableName: string
+    readonly synopsis: string
+    readonly maintainer: string
+    readonly desktop: { readonly entry: { readonly Name: string; readonly StartupWMClass: string } }
+  }
+  readonly deb: { readonly packageName: string }
+  readonly rpm: { readonly packageName: string; readonly fpm: readonly string[] }
   readonly nsis: {
     readonly include: string
     readonly oneClick: false
