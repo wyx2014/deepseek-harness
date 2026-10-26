@@ -1,5 +1,7 @@
 ; A product may supply its palette and shape in product-theme.nsh beside this file; every value below is a default.
-!include /NONFATAL "${__FILEDIR__}\product-theme.nsh"
+!if /FileExists "${__FILEDIR__}\product-theme.nsh"
+    !include "${__FILEDIR__}\product-theme.nsh"
+!endif
 !macro InstallerDefault NAME VALUE
     !ifndef ${NAME}
         !define ${NAME} `${VALUE}`

@@ -53,6 +53,24 @@ describe('BootPage', () => {
     expect(el.textContent).not.toContain('Loading plugins…')
   })
 
+  it('shows only the product logo while loading, and still reports failures', () => {
+    const el = document.createElement('div')
+    document.body.append(el)
+    const page = new BootPage(el, { logo: '/startup-logo.png' })
+    const logo = el.querySelector<HTMLImageElement>('[data-dsh-boot-logo]')
+    expect(logo?.getAttribute('src')).toBe('/startup-logo.png')
+    expect(el.firstElementChild?.getAttribute('role')).toBe('status')
+    expect(el.textContent).toBe('')
+    expect(el.querySelector('[data-dsh-boot-spinner]')).toBeNull()
+    page.setTotal(2)
+    page.setState('a', 'active')
+    expect(el.querySelector('[data-dsh-boot-logo]')).toBe(logo)
+    page.setState('b', 'failed')
+    expect(el.textContent).toContain('Failed to load plugins')
+    expect(el.textContent).toContain('b')
+    expect(el.querySelector('[data-dsh-boot-logo]')).toBeNull()
+  })
+
   it('detaches on disposal', () => {
     const { el, page } = mount()
     page.dispose()

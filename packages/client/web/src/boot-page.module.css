@@ -36,6 +36,32 @@
   color: var(--dsw-alias-label-primary, var(--dsh-boot-label-primary));
 }
 
+/* Mirrors the startup cover in apps/web/index.html, so the handover between them is invisible. */
+.logo {
+  width: 96px;
+  height: 96px;
+  filter: drop-shadow(0 20px 12px rgb(0 0 0 / 12%)) drop-shadow(0 8px 5px rgb(0 0 0 / 12%));
+  animation: logo-pop 0.72s cubic-bezier(0.22, 1, 0.36, 1) both, logo-breathe 1.8s ease-in-out 0.72s infinite;
+  transform-origin: center;
+}
+
+@keyframes logo-pop {
+  0% { opacity: 0; transform: scale(0.72); }
+  38% { opacity: 1; transform: scale(1.045); }
+  58% { transform: scale(0.985); }
+  76% { transform: scale(1.008); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes logo-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo { animation: none; }
+}
+
 .hint {
   font-size: 12px;
   line-height: 18px;

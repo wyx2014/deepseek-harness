@@ -11,6 +11,7 @@ import { developmentRuntimeDirectory, resolveDesktopBuildTarget, resolveDesktopT
 import { canReuseDevelopmentRuntime } from './development-runtime.ts'
 import { prepareDevelopmentProject } from './development-project.ts'
 import { prepareDevelopmentApp } from './development-app.ts'
+import { developmentArtifactStale } from './development-freshness.ts'
 import { preparePrimaryRuntime } from './prepare-primary-runtime.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
@@ -100,6 +101,23 @@ async function main(): Promise<void> {
   if (!values['skip-build']) {
     await runPackageScript('build', REPOSITORY_ROOT)
     await runPackageScript('build', APP_ROOT)
+  } else {
+    // Reuse the full build, but never launch a shell or page older than its own sources.
+    const web = join(REPOSITORY_ROOT, 'apps', 'web')
+    const bootPage = join(REPOSITORY_ROOT, 'packages', 'client', 'web')
+    // The web page bundles the boot page from its built lib, so the libraries rebuild first.
+    for (const artifact of [
+      { name: 'client libraries', output: join(bootPage, 'lib', 'index.js'), cwd: REPOSITORY_ROOT, script: 'build:lib:client',
+        inputs: [join(bootPage, 'src')] },
+      { name: 'desktop shell', output: join(APP_ROOT, 'lib', 'main.js'), cwd: APP_ROOT, script: 'build',
+        inputs: ['src', 'renderer', 'tsdown.config.ts', 'package.json'].map(path => join(APP_ROOT, path)) },
+      { name: 'web page', output: join(web, 'dist', 'index.html'), cwd: REPOSITORY_ROOT, script: 'build:web',
+        inputs: [...['src', 'public', 'index.html', 'vite.config.ts'].map(path => join(web, path)), join(bootPage, 'lib', 'index.js')] },
+    ]) {
+      if (!developmentArtifactStale(artifact)) continue
+      console.log(`desktop development: rebuilding the ${artifact.name}, its sources changed`)
+      await runPackageScript(artifact.script, artifact.cwd)
+    }
   }
   for (const path of [
     join(APP_ROOT, 'lib', 'main.js'),

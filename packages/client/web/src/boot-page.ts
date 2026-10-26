@@ -14,6 +14,15 @@ function div(className: string | undefined, text?: string): HTMLDivElement {
   return el
 }
 
+/** Product presentation of the loading state. */
+export interface BootPageOptions {
+  /**
+   * Product logo URL. When given, loading shows only this logo with the product's entrance and breathing, matching
+   * the startup cover the application draws before any script runs; failures still show the report.
+   */
+  readonly logo?: string
+}
+
 /** Kernel-owned page mounted below the application's root element. */
 export class BootPage {
   private readonly root: HTMLDivElement
@@ -21,6 +30,8 @@ export class BootPage {
   private readonly wordmark: HTMLDivElement
   private readonly spinner: HTMLDivElement
   private readonly hint: HTMLDivElement
+  /** Children of the loading state: the logo alone, or the wordmark, progress arc and hint. */
+  private readonly loading: readonly [HTMLElement, ...HTMLElement[]]
   private readonly states = new Map<string, LoaderEntryState>()
   private readonly active = new Set<string>()
   private total = 0
@@ -29,8 +40,9 @@ export class BootPage {
   /**
    * Build and attach the boot page.
    * @param container - Application mount point.
+   * @param options - Product presentation.
    */
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, options: BootPageOptions = {}) {
     this.root = div(css.boot)
     this.root.dataset.dshBoot = ''
     this.card = div(css.card)
@@ -38,7 +50,18 @@ export class BootPage {
     this.spinner = div(css.spinner)
     this.spinner.dataset.dshBootSpinner = ''
     this.hint = div(css.hint, 'Loading plugins…')
-    this.card.append(this.wordmark, this.spinner, this.hint)
+    if (options.logo === undefined) this.loading = [this.wordmark, this.spinner, this.hint]
+    else {
+      const logo = document.createElement('img')
+      logo.className = css.logo ?? ''
+      logo.src = options.logo
+      logo.alt = ''
+      logo.dataset.dshBootLogo = ''
+      this.root.setAttribute('role', 'status')
+      this.root.setAttribute('aria-label', 'Loading')
+      this.loading = [logo]
+    }
+    this.card.append(...this.loading)
     this.root.append(this.card)
     container.append(this.root)
     this.updateProgress()
@@ -83,9 +106,7 @@ export class BootPage {
   private render(): void {
     const failed = [...this.states].filter(([, state]) => state === 'failed').map(([id]) => id)
     if (this.failure === undefined && failed.length === 0) {
-      if (this.spinner.parentElement !== this.card) {
-        this.card.replaceChildren(this.wordmark, this.spinner, this.hint)
-      }
+      if (this.loading[0].parentElement !== this.card) this.card.replaceChildren(...this.loading)
       return
     }
     const report = div(css.failed)

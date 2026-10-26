@@ -10,7 +10,7 @@ import type {
   BootManifest, ClientModuleCreateOptions, ClientModuleSystem, DshWindow,
 } from '@deepseek-ai/dsh-client-modules/client'
 import { bootClient } from './boot-client.ts'
-import { BootPage } from './boot-page.ts'
+import { BootPage, type BootPageOptions } from './boot-page.ts'
 import { mountClient } from './mount.ts'
 import { getStaticModules } from './seed.ts'
 import { installWindowDragRecall } from './window-drag/recall.ts'
@@ -33,11 +33,12 @@ export class AppWebEntry {
    * Draw the boot page; {@link run} starts the loader.
    * @param container - Application mount point.
    * @param seams - Optional module transport replacement.
+   * @param presentation - Product presentation of the boot page.
    */
-  constructor(container: HTMLElement, seams?: BootSeams) {
+  constructor(container: HTMLElement, seams?: BootSeams, presentation?: BootPageOptions) {
     this.container = container
     this.seams = seams
-    this.page = new BootPage(container)
+    this.page = new BootPage(container, presentation)
   }
 
   /**

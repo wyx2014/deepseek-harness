@@ -7,9 +7,60 @@
     <link rel="icon" type="image/svg+xml" href="/favicon-dark.svg" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" media="(prefers-color-scheme: light)" />
     <title>TP Cowork</title>
+    <style>
+      /* Startup cover over the boot page; ./src/startup-splash.ts fades it once the application mounts. */
+      #dsh-startup {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--dsh-boot-bg, Canvas);
+        transition: opacity 0.16s ease;
+        -webkit-app-region: drag;
+      }
+      body.dsh-startup-ready #dsh-startup {
+        pointer-events: none;
+        opacity: 0;
+      }
+      .dsh-startup-logo {
+        width: 96px;
+        height: 96px;
+        filter: drop-shadow(0 20px 12px rgb(0 0 0 / 0.12)) drop-shadow(0 8px 5px rgb(0 0 0 / 0.12));
+        transform: scale(0.72);
+        opacity: 0;
+        /* The logo settles, then breathes until the application mounts. */
+        animation: dsh-startup-logo-pop 0.72s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+          dsh-startup-logo-breathe 1.8s ease-in-out 0.72s infinite;
+        transform-origin: center;
+        /* The desktop loads this page in a hidden window; the entrance waits until it is seen. */
+        animation-play-state: paused;
+      }
+      body.dsh-startup-visible .dsh-startup-logo {
+        animation-play-state: running;
+      }
+      @keyframes dsh-startup-logo-pop {
+        0% { opacity: 0; transform: scale(0.72); }
+        38% { opacity: 1; transform: scale(1.045); }
+        58% { transform: scale(0.985); }
+        76% { transform: scale(1.008); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      @keyframes dsh-startup-logo-breathe {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .dsh-startup-logo { opacity: 1; transform: scale(1); animation: none; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="dsh-startup" role="status" aria-busy="true" aria-label="Loading">
+      <img src="/startup-logo.png" class="dsh-startup-logo" data-startup-logo alt="" aria-hidden="true" />
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

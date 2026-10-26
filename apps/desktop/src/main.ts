@@ -694,7 +694,7 @@ async function main(): Promise<void> {
     if (url.hostname === 'shell') return serveWebDocument(request, join(app.getAppPath(), 'renderer'))
     if (url.hostname === 'app') {
       if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.startsWith('/assets/')
-        || ['/favicon.svg', '/manifest.webmanifest'].includes(url.pathname)) {
+        || ['/favicon.svg', '/manifest.webmanifest', '/startup-logo.png'].includes(url.pathname)) {
         return serveWebDocument(request, join(resources.dsh, 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist'))
       }
       if (backend.host === undefined || hostUrl === undefined || hostCookie === undefined) {
@@ -725,6 +725,16 @@ async function main(): Promise<void> {
     }
     if (typeof message !== 'string') throw new Error('dsh desktop: startup failure must be text')
     reportFatal(new Error(message), 'web-boot')
+  })
+
+  ipcMain.handle(DESKTOP_IPC.bootShown, (event) => {
+    assertDesktopSender(event, ['app'])
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window === null || window.isDestroyed() || window.isVisible()) return
+    return new Promise<void>((resolve) => {
+      window.once('show', () => { resolve() })
+      window.once('closed', () => { resolve() })
+    })
   })
 
   ipcMain.handle(BROWSER_PLUGIN_IPC.request, (event, operation: unknown, payload: unknown) => {
