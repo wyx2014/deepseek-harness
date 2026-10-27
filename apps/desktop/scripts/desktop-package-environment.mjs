@@ -34,24 +34,25 @@ export function localMacOSPackageEnvironment(environment = process.env) {
 }
 
 /**
- * Prepare an explicitly selected unsigned Windows product without an update service.
+ * Prepare an explicitly selected unsigned standalone product without an update service.
  * @param {NodeJS.ProcessEnv} environment Parent environment, retained only for build tools.
  * @returns {NodeJS.ProcessEnv} Isolated local settings; no dotenv or ambient release settings are used.
  */
-export function standaloneWindowsPackageEnvironment(environment = process.env) {
+export function standaloneDesktopPackageEnvironment(environment = process.env) {
   return { ...localMacOSPackageEnvironment(environment), DSH_DESKTOP_STANDALONE: '1' }
 }
 
 /**
  * Read a machine preset when selected, otherwise the target's required dotenv; no ambient release fallback.
  * PACKAGE_TEST_RELEASE_ID overrides the test preset only; blank retains its configured ID.
- * @param {'win32' | 'darwin'} platform Target platform.
+ * @param {'win32' | 'darwin' | 'linux'} platform Target platform; Linux must use standalone defaults.
  * @param {NodeJS.ProcessEnv} environment Parent environment, retained only for unrelated build tools.
  * @param {string} appRoot Desktop application directory; relative credential paths resolve here.
  * @param {{ unsigned?: boolean, prepareOnly?: boolean }} options Unsigned presets and Windows preparation-only presets never read signing credentials.
  * @returns {NodeJS.ProcessEnv} Isolated environment with file-owned release settings.
  */
 export function loadDesktopPackageEnvironment(platform, environment = process.env, appRoot = APP_ROOT, options = {}) {
+  if (platform === 'linux') throw new Error('desktop package: Linux requires standalone unsigned product packaging')
   const preset = environment.DSH_PACKAGING_PRESET
   let path = join(appRoot, platform === 'win32' ? '.env.windows' : '.env.macos')
   if (preset !== undefined) {
@@ -138,22 +139,25 @@ function requireReadableFile(environment, name) {
 /**
  * Validate the packaging mode before preparation without invoking a token or Apple's services.
  * @param {NodeJS.ProcessEnv} environment Selected local defaults or file-owned release settings.
- * @param {{ platform: 'win32' | 'darwin', arch: string }} target Selected release target.
+ * @param {{ platform: 'win32' | 'darwin' | 'linux', arch: string }} target Selected release target.
  * @param {{ unsigned?: boolean, prepareOnly?: boolean, standalone?: boolean, skipNotarization?: boolean }} options Explicit packaging mode.
  * @returns {void}
  */
 export function validateDesktopPackageEnvironment(environment, target, options = {}) {
   resolveDesktopAppId(environment)
   resolveNpmRegistry(environment)
-  if (options.standalone && (target.platform !== 'win32' || !options.unsigned)) {
-    throw new Error('desktop package: standalone mode requires unsigned Windows packaging')
+  if (options.standalone && (!['win32', 'linux'].includes(target.platform) || !options.unsigned)) {
+    throw new Error('desktop package: standalone mode requires unsigned Windows or Linux packaging')
+  }
+  if (target.platform === 'linux' && !options.standalone) {
+    throw new Error('desktop package: Linux requires standalone unsigned product packaging')
   }
   if (Boolean(options.standalone) !== (environment.DSH_DESKTOP_STANDALONE === '1')) {
     throw new Error('desktop package: standalone mode must be selected explicitly')
   }
   if (!options.standalone && (target.platform !== 'darwin' || !options.unsigned)) resolveDesktopPolicyEnvironment(environment)
   if (target.platform === 'darwin') resolveMacOSPackageSettings(environment)
-  else resolveWindowsPackageSettings(environment)
+  else if (target.platform === 'win32') resolveWindowsPackageSettings(environment)
   if (options.unsigned) return
   if (!options.prepareOnly) resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
   if (target.platform === 'win32') {

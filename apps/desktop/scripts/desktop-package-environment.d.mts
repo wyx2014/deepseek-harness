@@ -8,11 +8,11 @@
 export function localMacOSPackageEnvironment(environment?: NodeJS.ProcessEnv): NodeJS.ProcessEnv
 
 /**
- * Prepare an explicitly selected unsigned Windows product without an update service.
+ * Prepare an explicitly selected unsigned standalone product without an update service.
  * @param environment Parent environment, retained only for build tools.
  * @returns Isolated local settings; no dotenv or ambient release settings are used.
  */
-export function standaloneWindowsPackageEnvironment(environment?: NodeJS.ProcessEnv): NodeJS.ProcessEnv
+export function standaloneDesktopPackageEnvironment(environment?: NodeJS.ProcessEnv): NodeJS.ProcessEnv
 
 /**
  * Read a machine preset when selected, otherwise the target's required dotenv; no ambient release fallback.
@@ -24,7 +24,7 @@ export function standaloneWindowsPackageEnvironment(environment?: NodeJS.Process
  * @returns Isolated environment with file-owned release settings.
  */
 export function loadDesktopPackageEnvironment(
-  platform: 'win32' | 'darwin',
+  platform: 'win32' | 'darwin' | 'linux',
   environment?: NodeJS.ProcessEnv,
   appRoot?: string,
   options?: { unsigned?: boolean, prepareOnly?: boolean },
@@ -39,6 +39,6 @@ export function loadDesktopPackageEnvironment(
  */
 export function validateDesktopPackageEnvironment(
   environment: NodeJS.ProcessEnv,
-  target: { platform: 'win32' | 'darwin', arch: string },
+  target: { platform: 'win32' | 'darwin' | 'linux', arch: string },
   options?: { unsigned?: boolean, prepareOnly?: boolean, standalone?: boolean, skipNotarization?: boolean },
 ): void

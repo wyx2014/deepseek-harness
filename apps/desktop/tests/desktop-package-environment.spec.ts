@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { loadDesktopPackageEnvironment, localMacOSPackageEnvironment, standaloneWindowsPackageEnvironment, validateDesktopPackageEnvironment } from '../scripts/desktop-package-environment.mjs'
+import { loadDesktopPackageEnvironment, localMacOSPackageEnvironment, standaloneDesktopPackageEnvironment, validateDesktopPackageEnvironment } from '../scripts/desktop-package-environment.mjs'
 import { resolveWindowsPackageSettings } from '../scripts/windows-package-settings.mjs'
 
 const WINDOWS = { platform: 'win32', arch: 'x64' } as const
@@ -10,13 +10,18 @@ const MACOS = { platform: 'darwin', arch: 'arm64' } as const
 const POLICY = { DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
   DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }) }
 
-it('standalone Windows settings discard ambient update and signing configuration', () => {
-  const environment = standaloneWindowsPackageEnvironment({ PATH: '/tools', ...POLICY,
+it.each(['win32', 'linux'] as const)('standalone %s settings discard ambient update and signing configuration', (platform) => {
+  const environment = standaloneDesktopPackageEnvironment({ PATH: '/tools', ...POLICY,
     DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'test-secret', DOWNLOAD_PROD_COS_SECRET_KEY: 'test-secret' })
   expect(environment).toEqual({ PATH: '/tools', DSH_DESKTOP_APP_ID: 'com.deepseek.harness', DSH_DESKTOP_UNSIGNED: '1', DSH_DESKTOP_STANDALONE: '1' })
-  expect(() => { validateDesktopPackageEnvironment(environment, WINDOWS, { unsigned: true, standalone: true }) }).not.toThrow()
+  expect(() => { validateDesktopPackageEnvironment(environment, { platform, arch: 'x64' }, { unsigned: true, standalone: true }) }).not.toThrow()
   expect(() => { validateDesktopPackageEnvironment(environment, WINDOWS, { unsigned: true }) }).toThrow(/explicitly/u)
   expect(() => { validateDesktopPackageEnvironment(environment, WINDOWS, { standalone: true }) }).toThrow(/unsigned Windows/u)
+})
+
+it('requires standalone Linux settings instead of reading macOS or Windows release credentials', () => {
+  expect(() => loadDesktopPackageEnvironment('linux', {}, '/missing')).toThrow(/Linux requires standalone/u)
+  expect(() => validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: 'com.example.desktop' }, { platform: 'linux', arch: 'x64' }, { unsigned: true })).toThrow(/Linux requires standalone/u)
 })
 const RELEASE = { ...POLICY, DSH_DESKTOP_APP_ID: 'com.example.desktop', DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com',
   DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef' }

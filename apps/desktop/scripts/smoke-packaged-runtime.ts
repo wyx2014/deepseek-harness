@@ -11,12 +11,16 @@ const paths = resolveDesktopTargetBuildPaths()
 const { values } = parseArgs({ options: { unsigned: { type: 'boolean', default: false }, 'skip-notarization': { type: 'boolean', default: false } }, allowPositionals: false })
 const target = resolveDesktopBuildTarget()
 const windows = target === 'win-x64'
+const linux = target === 'linux-x64'
 const productName = process.env.DSH_DESKTOP_PRODUCT_NAME ?? 'DeepSeek Harness'
 const artifacts = desktopArtifactOutput(paths, { unsigned: values.unsigned, skipNotarization: values['skip-notarization'] }).directory
 const application = windows ? join(artifacts, 'win-unpacked')
-  : join(artifacts, target === 'mac-arm64' ? 'mac-arm64' : 'mac', `${productName}.app`, 'Contents')
-const resources = join(application, windows ? 'resources' : 'Resources')
-const executable = windows ? join(application, `${productName}.exe`) : join(application, 'MacOS', productName)
+  : linux ? join(artifacts, 'linux-unpacked')
+    : join(artifacts, target === 'mac-arm64' ? 'mac-arm64' : 'mac', `${productName}.app`, 'Contents')
+const resources = join(application, windows || linux ? 'resources' : 'Resources')
+const executable = windows ? join(application, `${productName}.exe`)
+  : linux ? join(application, process.env.DSH_DESKTOP_ARTIFACT_PREFIX ?? 'deepseek-harness')
+    : join(application, 'MacOS', productName)
 const descriptor = await verifyDesktopRuntime(paths.dsh, readDesktopRuntime(paths.dsh).release.version,
   resolveDesktopPackageTarget(target))
 if (windows && !values.unsigned) await verifyWindowsCode(application)

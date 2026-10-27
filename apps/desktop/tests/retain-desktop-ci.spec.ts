@@ -9,6 +9,11 @@ import { prepareDesktopPublication } from '../scripts/publish-desktop-ci.ts'
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
 
+it('rejects standalone Linux before reading release credentials or retaining update artifacts', async () => {
+  await expect(retainDesktopCi({ DSH_DESKTOP_TARGET_PLATFORM: 'linux', DSH_DESKTOP_TARGET_ARCH: 'x64' }))
+    .rejects.toThrow('standalone Linux packages use Actions artifacts')
+})
+
 it.each([
   ['mac-arm64', 'notarized'], ['win-x64', 'signed'], ['mac-arm64', 'unnotarized'], ['win-x64', 'unsigned'],
 ] as const)('retains the complete %s %s release without signing or upload credentials', async (target, qualification) => {

@@ -16,7 +16,7 @@ async function fixture(target: PrimaryRuntimeTarget = 'mac-x64') {
   const runtime = await mkdtemp(join(tmpdir(), 'desktop-runtime-reuse-'))
   roots.push(runtime)
   const manifest: PrimaryRuntimeManifest = {
-    desktopVersion: '1.0.0', platform: target === 'win-x64' ? 'win32' : 'darwin',
+    desktopVersion: '1.0.0', platform: target === 'win-x64' ? 'win32' : target.startsWith('linux-') ? 'linux' : 'darwin',
     arch: target.endsWith('arm64') ? 'arm64' : 'x64', python: lock.pythonVersion,
     node: lock.nodeVersion, pnpm: '11.28.5', pythonPackages: lock.pythonPackages,
     payloadDigest: primaryRuntimePayloadDigest(target, lock, '11.28.5'),
@@ -33,7 +33,7 @@ async function fixture(target: PrimaryRuntimeTarget = 'mac-x64') {
   return { runtime, manifest, manifestPath, entries, target }
 }
 
-it.each(['mac-x64', 'mac-arm64', 'win-x64'] as const)('reuses complete %s resources without modifying them', async (target) => {
+it.each(['mac-x64', 'mac-arm64', 'win-x64', 'linux-x64'] as const)('reuses complete %s resources without modifying them', async (target) => {
   const { runtime, manifestPath } = await fixture(target)
   const before = await readFile(manifestPath, 'utf8')
   expect(canReuseDevelopmentRuntime(runtime, target, '1.0.0', '11.28.5')).toBe(true)

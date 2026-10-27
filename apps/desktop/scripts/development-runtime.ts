@@ -22,7 +22,7 @@ export function canReuseDevelopmentRuntime(runtime: string, target: PrimaryRunti
   const manifest = parsePrimaryRuntime(JSON.parse(readFileSync(path, 'utf8')))
   if (manifest.desktopVersion !== version || manifest.pnpm !== pnpmVersion
     || manifest.payloadDigest !== primaryRuntimePayloadDigest(target, lock, pnpmVersion)
-    || manifest.platform !== (target === 'win-x64' ? 'win32' : 'darwin')
+    || manifest.platform !== (target === 'win-x64' ? 'win32' : target.startsWith('linux-') ? 'linux' : 'darwin')
     || manifest.arch !== (target.endsWith('arm64') ? 'arm64' : 'x64')) return false
   const entries = workspaceDependencyPaths(root, manifest)
   return [entries.python, entries.pythonPackages, entries.node, entries.nodePackages, entries.pnpm,

@@ -84,8 +84,11 @@ export function createElectronBuilderConfig(
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
   const standalone = env.DSH_DESKTOP_STANDALONE === '1'
-  if (standalone && (!packagesWindows || !unsigned || !env.DSH_DESKTOP_PRODUCT_CONFIG)) {
-    throw new Error('desktop package: standalone mode requires an unsigned Windows product')
+  if (standalone && ((!packagesWindows && resolvedPlatform !== 'linux') || !unsigned || !env.DSH_DESKTOP_PRODUCT_CONFIG)) {
+    throw new Error('desktop package: standalone mode requires an unsigned Windows or Linux product')
+  }
+  if (resolvedPlatform === 'linux' && !standalone) {
+    throw new Error('desktop package: Linux requires standalone unsigned product packaging')
   }
   const policy = standalone || (packagesMacOS && unsigned) ? undefined : resolveDesktopPolicyEnvironment(env)
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()

@@ -26,7 +26,9 @@ describe('desktop package target', () => {
   })
 
   it('rejects unsupported targets and hosts before building', () => {
-    expect(() => resolveDesktopPackageTarget('linux-x64', 'linux', 'x64')).toThrow(/unsupported target/u)
+    expect(() => resolveDesktopPackageTarget('linux-arm64', 'linux', 'arm64')).toThrow(/unsupported target/u)
+    expect(() => resolveDesktopPackageTarget('linux-x64', 'darwin', 'x64')).toThrow(/Linux x64/u)
+    expect(() => resolveDesktopPackageTarget('linux-x64', 'linux', 'arm64')).toThrow(/Linux x64/u)
     expect(() => resolveDesktopPackageTarget('win-x64', 'darwin', 'arm64')).toThrow(/Windows x64/u)
     expect(() => resolveDesktopPackageTarget('mac-arm64', 'darwin', 'x64')).toThrow(/Apple Silicon/u)
     expect(() => resolveDesktopPackageTarget('mac-arm64', 'linux', 'arm64')).toThrow(/macOS/u)
@@ -82,6 +84,20 @@ describe('desktop package target', () => {
       'never',
     ])
     expect(desktopElectronBuilderArguments(target, true)).toContain('--dir')
+  })
+
+  it('packages Linux AppImage and DEB only through native standalone unsigned products', () => {
+    const args = ['linux-x64', '--unsigned', '--standalone', '--product', 'product.json']
+    const invocation = parseDesktopPackageInvocation(args, 'linux', 'x64')
+    expect(invocation).toMatchObject({ standalone: true, unsigned: true, target: { platform: 'linux', arch: 'x64' } })
+    expect(desktopElectronBuilderArguments(invocation.target, false)).toEqual([
+      'exec', 'electron-builder', '--config', 'electron-builder.config.mjs', '--linux', 'AppImage', 'deb', '--x64', '--publish', 'never',
+    ])
+    expect(desktopElectronBuilderArguments(invocation.target, true)).toContain('--dir')
+    expect(desktopElectronBuilderArguments(invocation.target, true)).not.toContain('AppImage')
+    expect(() => parseDesktopPackageInvocation(['linux-x64', '--unsigned'], 'linux', 'x64')).toThrow(/--standalone --product/u)
+    expect(() => parseDesktopPackageInvocation(args.filter(arg => arg !== '--unsigned'), 'linux', 'x64')).toThrow(/--unsigned/u)
+    expect(() => parseDesktopPackageInvocation([...args, '--skip-notarization'], 'linux', 'x64')).toThrow(/signed macOS/u)
   })
 
   it('accepts unsigned supported targets and rejects preparation-only use', () => {

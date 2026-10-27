@@ -20,7 +20,20 @@ describe('installer preparation preserves application dependencies', () => {
     expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
     expect(config.publish).toBeNull()
     expect(config.win.forceCodeSigning).toBe(false)
-    expect(() => createElectronBuilderConfig({ ...env, DSH_DESKTOP_UNSIGNED: '0' }, 'win32', 'x64')).toThrow(/unsigned Windows product/u)
+    expect(() => createElectronBuilderConfig({ ...env, DSH_DESKTOP_UNSIGNED: '0' }, 'win32', 'x64')).toThrow(/unsigned Windows or Linux product/u)
+  })
+  it('builds standalone Linux without a policy service and keeps product Python outside ASAR', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const env = { DSH_DESKTOP_APP_ID: 'com.example.product', DSH_DESKTOP_UNSIGNED: '1',
+      DSH_DESKTOP_STANDALONE: '1', DSH_DESKTOP_PRODUCT_CONFIG: '/product/desktop-product.json',
+      DSH_DESKTOP_PRODUCT_NAME: 'Example Cowork', DSH_DESKTOP_ARTIFACT_PREFIX: 'example-cowork' }
+    const config = createElectronBuilderConfig(env, 'linux', 'x64')
+    expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+    expect(config.publish).toBeNull()
+    expect(config.electronDist).toMatch(/targets[/\\]linux-x64[/\\]electron$/u)
+    expect(config.linux.executableName).toBe('example-cowork')
+    expect(config.asarUnpack).toContain('**/runtime/python/**/*')
+    expect(() => createElectronBuilderConfig({ ...env, DSH_DESKTOP_STANDALONE: '0' }, 'linux', 'x64')).toThrow(/Linux requires standalone/u)
   })
   it('lays out a branded disk image and names Linux packages after the product', async () => {
     const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
