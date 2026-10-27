@@ -29,7 +29,7 @@ try {
   $brokenArchive = Join-Path $scratch 'broken.7z'
   [System.IO.File]::WriteAllText($brokenArchive, 'invalid archive')
 
-  foreach ($mode in @('first', 'upgrade', 'transient-lock', 'locked', 'locked-stage', 'missing-stage', 'restore-conflict', 'broken', 'cancelled')) {
+  foreach ($mode in @('first', 'upgrade', 'transient-lock', 'locked', 'scanned-stage', 'locked-stage', 'missing-stage', 'restore-conflict', 'broken', 'cancelled')) {
     $caseRoot = Join-Path $scratch $mode
     $target = Join-Path $caseRoot 'Application'
     New-Item -ItemType Directory -Path $caseRoot | Out-Null
@@ -47,7 +47,8 @@ try {
     $compileArgs = @('/V2', "/DOUTPUT_FILE=$probe", "/DPAYLOAD_FILE=$caseArchive", "/DTARGET_DIR=$target", "/DDSH_SEVENZIP_PATH=$SevenZip")
     if ($FrameLibrary) { $compileArgs += @("/DSOURCE_DLL=$FrameLibrary", "/DREPORT_DIR=$reportDir") }
     if ($mode -eq 'missing-stage') { $compileArgs += '/DMISSING_STAGE' }
-    if ($mode -eq 'locked-stage') { $compileArgs += '/DLOCKED_STAGE' }
+    if ($mode -eq 'scanned-stage') { $compileArgs += '/DLOCKED_STAGE=1' }
+    if ($mode -eq 'locked-stage') { $compileArgs += '/DLOCKED_STAGE=0' }
     if ($mode -eq 'restore-conflict') { $compileArgs += '/DRESTORE_CONFLICT' }
     if ($mode -eq 'cancelled') { $compileArgs += '/DCANCELLED' }
     Invoke-Checked $Makensis ($compileArgs + $fixture)
@@ -87,7 +88,7 @@ try {
         $process.WaitForExit()
         throw "Directory smoke $mode did not exit within 60 seconds"
       }
-      $expectedExit = if ($mode -in @('first', 'upgrade', 'transient-lock')) { 0 } else { 2 }
+      $expectedExit = if ($mode -in @('first', 'upgrade', 'transient-lock', 'scanned-stage')) { 0 } else { 2 }
       if ($process.ExitCode -ne $expectedExit) {
         throw "Directory smoke $mode exited with $($process.ExitCode), expected $expectedExit"
       }
@@ -119,11 +120,11 @@ try {
       Write-Output "Directory replacement smoke passed: $mode"
       continue
     }
-    $expectedAsset = if ($mode -in @('first', 'upgrade', 'transient-lock')) { 'new asset' } else { 'old asset' }
+    $expectedAsset = if ($mode -in @('first', 'upgrade', 'transient-lock', 'scanned-stage')) { 'new asset' } else { 'old asset' }
     if ([System.IO.File]::ReadAllText((Join-Path $target 'asset.txt')) -ne $expectedAsset) {
       throw "Directory smoke $mode changed the wrong version"
     }
-    $expectObsolete = $mode -notin @('first', 'upgrade', 'transient-lock')
+    $expectObsolete = $mode -notin @('first', 'upgrade', 'transient-lock', 'scanned-stage')
     if ((Test-Path -LiteralPath (Join-Path $target 'obsolete.txt')) -ne $expectObsolete) {
       throw "Directory smoke $mode did not preserve the expected old-only file state"
     }
@@ -140,6 +141,16 @@ try {
         foreach ($expected in @('Result: 7-Zip exit code 2 (fatal error)', "Archive: $caseArchive", 'Cannot open the file as [7z] archive')) {
           if (-not $report.Contains($expected)) { throw "Directory smoke $mode report lacks '$expected'" }
         }
+      } elseif ($mode -eq 'scanned-stage') {
+        if ($reports.Count -ne 1 -or $reports[0].Name -ne 'directory-copy-fallback.log') {
+          throw "Directory smoke $mode did not save exactly one copy fallback note"
+        }
+        $note = Get-Content -LiteralPath $reports[0].FullName -Raw
+        if (([regex]::Matches($note, 'promote: Windows error: (5|32|33)\b')).Count -ne 3 -or $note -notmatch 'copy: robocopy exit [0-7]\b') {
+          throw "Directory smoke $mode note lacks the refused renames or the successful copy"
+        }
+        $deepCopy = Join-Path $target ([IO.Path]::GetRelativePath($payload, $deepPayload))
+        if ([IO.File]::ReadAllText($deepCopy) -ne 'long path asset') { throw "Directory smoke $mode did not copy the long-path asset" }
       } elseif ($mode -in @('locked', 'locked-stage', 'missing-stage')) {
         if ($reports.Count -ne 1 -or $reports[0].Name -notmatch '^directory-failure-20\d{6}-\d{6}\.log$') {
           throw "Directory smoke $mode did not save exactly one directory report"
@@ -151,7 +162,7 @@ try {
           if (-not $report.Contains($expected)) { throw "Directory smoke $mode report lacks '$expected'" }
         }
         $attempts = ([regex]::Matches($report, 'Windows error: ')).Count - 1
-        $expectedAttempts = if ($mode -ne 'missing-stage') { 10 } else { 1 }
+        $expectedAttempts = switch ($mode) { 'locked' { 10 } 'locked-stage' { 3 } default { 1 } }
         if ($attempts -ne $expectedAttempts) { throw "Directory smoke $mode recorded $attempts failed attempts, expected $expectedAttempts" }
       } elseif ($reports.Count -ne 0) {
         throw "Directory smoke $mode saved an unexpected extraction report"

@@ -13,6 +13,9 @@ import { en, zh } from '../src/locale.ts'
 import { DesktopUpdatePreparationError } from '../src/update-error.ts'
 import { writeCrashReport } from '../src/crash-report.ts'
 import { connectDesktopWelcome } from '../src/welcome-backend.ts'
+import { showAboutWindow } from '../src/about-window.ts'
+
+vi.mock('../src/about-window.ts', () => ({ showAboutWindow: vi.fn(async () => true), focusAboutWindow: vi.fn() }))
 
 type InvokeEvent = { sender?: unknown; senderFrame: { url: string } }
 type InvokeHandler = (event: InvokeEvent, ...args: unknown[]) => unknown
@@ -579,17 +582,16 @@ describe('desktop main startup', () => {
     expect(options.iconPath).toBe(packaged ? join('desktop-test-resources', 'icon.png')
       : join('desktop-test-app', 'resources', 'icon-windows.png'))
     if (platform !== 'win32') { expect(about!.click).toBeUndefined(); return }
-    // Windows reuses the dimmed update dialog because Electron's fallback is a bare message box.
-    harness.dialog.showMessageBox.mockResolvedValueOnce({ response: 0 })
     ;(about!.click as () => void)()
     await vi.advanceTimersByTimeAsync(0)
     const zh = locale === 'zh-CN'
-    expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
-      type: 'info', title: zh ? '关于 TP Cowork' : 'About TP Cowork', message: 'TP Cowork',
-      detail: zh ? '版本 V1.0.0' : 'Version V1.0.0', buttons: [zh ? '确定' : 'OK'], cancelId: 0,
-    }))
+    expect(showAboutWindow).toHaveBeenLastCalledWith(harness.windows[0], {
+      title: zh ? '关于 TP Cowork' : 'About TP Cowork', heading: ['TP Cowork', zh ? '版本 V1.0.0' : 'Version V1.0.0'],
+      note: zh ? `版权所有 © ${String(new Date().getFullYear())} TP Cowork。` : `Copyright © ${String(new Date().getFullYear())} TP Cowork.`,
+      ok: zh ? '确定' : 'OK',
+    }, options.iconPath, zh ? 'zh-CN' : 'en')
     // A dialog that cannot open is logged, not surfaced as an unhandled rejection.
-    harness.dialog.showMessageBox.mockRejectedValueOnce(new Error('overlay unavailable'))
+    vi.mocked(showAboutWindow).mockRejectedValueOnce(new Error('overlay unavailable'))
     ;(about!.click as () => void)()
     await vi.advanceTimersByTimeAsync(0)
     expect(console.error).toHaveBeenLastCalledWith(expect.objectContaining({ message: 'overlay unavailable' }))
@@ -625,7 +627,7 @@ describe('desktop main startup', () => {
     expect(harness.updateDownload).not.toHaveBeenCalled()
   })
 
-  it('checks updates from the application menu without offering disabled test authentication', async () => {
+  it('checks updates from the application without offering disabled test authentication', async () => {
     configureTestAuthPopup(false)
     harness.embeddedPolicy = { origin: 'https://policy.example.com', authentication: 'feishu-test',
       allowedAuthOrigins: ['https://login.example.com'], allowedPageOrigins: ['https://downloads.example.com'] }
@@ -636,8 +638,7 @@ describe('desktop main startup', () => {
     await vi.advanceTimersByTimeAsync(0)
     request.mockClear()
     harness.updateCheck.mockClear()
-    const checkUpdates = applicationMenuItems().find(item => item.label === en.checkUpdatesMenu)!.click as () => void
-    checkUpdates()
+    void invoke(DESKTOP_IPC.updatesOpen, 'app')
     await vi.advanceTimersByTimeAsync(10_000)
     expect(request).toHaveBeenCalled()
     expect(harness.updateCheck).toHaveBeenCalledWith(true)
@@ -808,6 +809,7 @@ describe('desktop main startup', () => {
   })
 
   it('persists opt-in update evidence from the real main entry without private diagnostics', async () => {
+    vi.stubGlobal('process', { ...process, platform: 'darwin' })
     const directory = mkdtempSync(join(tmpdir(), 'dsh-main-update-journal-'))
     try {
       vi.stubEnv('DSH_DESKTOP_UPDATE_JOURNAL_DIR', directory)
@@ -1009,7 +1011,7 @@ describe('desktop main startup', () => {
     expect(() => handler(event, 'application', NaN, 34)).toThrow('invalid popup request')
     const application = handler(event, 'application', 48, 34)
     expect(harness.menu.buildFromTemplate.mock.lastCall![0].map(item => item.label ?? item.type)).toEqual([
-      '关于 TP Cowork', 'separator', '检查更新…', '管理 dsh 命令…', 'separator', '退出',
+      '关于 TP Cowork', 'separator', '退出',
     ])
     expect(harness.popup.mock.lastCall![0]).toMatchObject({ window, x: 48, y: 34 })
     expect(harness.popup.mock.lastCall![0].callback).toBeTypeOf('function')
@@ -1621,11 +1623,7 @@ describe('desktop main startup', () => {
       expect((harness.dialog.showMessageBox.mock.calls[0]![0] as { signal: AbortSignal }).signal.aborted).toBe(false)
       return Promise.resolve({ response: 0 })
     })
-    const submenu = applicationMenuItems()
-    const action = submenu.find(item => item.label === 'Check for Updates…')
-    expect(action?.click).toBeTypeOf('function')
-    // Electron supplies menu arguments that this callback does not consume.
-    Reflect.apply(action!.click!, undefined, [])
+    const firstPrompt = Promise.resolve(invoke(DESKTOP_IPC.updatesOpen, 'app'))
     const prompt = Promise.resolve(invoke(DESKTOP_IPC.updatesOpen, 'app'))
     const signal = await checking.promise
     await requested.promise
@@ -1633,7 +1631,7 @@ describe('desktop main startup', () => {
     expect(harness.dialog.showMessageBox).toHaveBeenCalledTimes(1)
     expect(harness.updateCheck).toHaveBeenLastCalledWith(true)
     checked.resolve({ phase: 'idle' })
-    await prompt
+    await Promise.all([firstPrompt, prompt])
     expect(signal.aborted).toBe(true)
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
       message: 'You’re up to date!', detail: 'Current version: 1.0.0',
@@ -1694,6 +1692,7 @@ describe('desktop main startup', () => {
   })
 
   it('lets a confirmed mandatory policy preempt an ordinary result dialog', async () => {
+    vi.stubGlobal('process', { ...process, platform: 'darwin' })
     harness.embeddedPolicy = { origin: 'https://policy.example.com',
       allowedPageOrigins: ['https://downloads.example.com'] }
     const policy = Promise.withResolvers<Response>()

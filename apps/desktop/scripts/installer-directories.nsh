@@ -14,7 +14,7 @@ Var dshRecoveryStopped
 
 ; MoveFileEx preserves the destination and exposes the Windows error before rollback changes it.
 ; Open files inside a directory can make its rename return access denied (5).
-!macro dshDirectoryOperation SOURCE DESTINATION RESULT PHASE
+!macro dshDirectoryOperation SOURCE DESTINATION RESULT PHASE ATTEMPTS
   Push $0
   Push $1
   Push $2
@@ -49,7 +49,7 @@ Var dshRecoveryStopped
       ${ExitDo}
     ${EndIf}
     IntOp $0 $0 + 1
-    ${If} $0 >= 10
+    ${If} $0 >= ${ATTEMPTS}
       ${ExitDo}
     ${EndIf}
     IntOp $1 $0 * 250
@@ -152,7 +152,7 @@ Function dshRollbackDirectories
     StrCpy $dshNewMoved ""
   ${EndIf}
   ${If} $dshOldMoved == "1"
-    !insertmacro dshDirectoryOperation "$dshOldDirectory" "$dshFinalDirectory" $dshRestoreError "restore"
+    !insertmacro dshDirectoryOperation "$dshOldDirectory" "$dshFinalDirectory" $dshRestoreError "restore" 10
     ${If} $dshRestoreError != 0
       ; Leave the complete backup in place if another process prevents restoration.
       DetailPrint $dshOldDirectory
@@ -167,6 +167,50 @@ Function dshRollbackDirectories
   StrCpy $INSTDIR $dshFinalDirectory
 FunctionEnd
 
+; Copying reads files that a scanner holds open, where renaming their directory is refused. Robocopy keeps long paths.
+; Success clears the promotion error; the original rename error stays reported when copying fails too.
+Function dshCopyStagedDirectory
+  ${If} $dshDirectoryError != 5
+  ${AndIf} $dshDirectoryError != 32
+  ${AndIf} $dshDirectoryError != 33
+    Return
+  ${EndIf}
+  ; Rollback removes the destination, so only one that the backup or empty removal already cleared is copied into.
+  ${If} ${FileExists} "$dshFinalDirectory\*.*"
+    Return
+  ${EndIf}
+  Push $0
+  Push $1
+  Push $2
+  StrCpy $dshNewMoved "1"
+  nsExec::ExecToStack '"$SYSDIR\robocopy.exe" "$dshNewDirectory" "$dshFinalDirectory" /E /MT:8 /R:5 /W:1 /NP /NFL /NDL /NJH /NJS'
+  Pop $0
+  Pop $1
+  ClearErrors
+  FileOpen $2 "$PLUGINSDIR\directory-operations.log" a
+  ${IfNot} ${Errors}
+    FileSeek $2 0 END
+    FileWrite $2 "copy: robocopy exit $0$\r$\n$1$\r$\n"
+    FileClose $2
+  ${EndIf}
+  ; Robocopy exit codes below 8 report success; nsExec reports a launch failure as "error".
+  ${If} $0 != "error"
+  ${AndIf} $0 < 8
+    StrCpy $dshDirectoryError 0
+    DetailPrint "Directory rename was refused; copied the staged files instead."
+    ; Exit cleanup retries removing staged files still held open.
+    RMDir /r "\\?\$dshNewDirectory"
+    ${If} $dshDirectoryLogDirectory != ""
+      CreateDirectory "$dshDirectoryLogDirectory"
+      CopyFiles /SILENT "$PLUGINSDIR\directory-operations.log" "$dshDirectoryLogDirectory\directory-copy-fallback.log"
+    ${EndIf}
+  ${EndIf}
+  ClearErrors
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd
+
 Function dshPromoteDirectories
   !ifmacrodef InstallerPublishStage
     !insertmacro InstallerPublishStage 2
@@ -177,7 +221,7 @@ Function dshPromoteDirectories
   ${If} ${FileExists} "$dshFinalDirectory\*.*"
     StrCpy $dshDirectorySource $dshFinalDirectory
     StrCpy $dshDirectoryDestination $dshOldDirectory
-    !insertmacro dshDirectoryOperation "$dshDirectorySource" "$dshDirectoryDestination" $dshDirectoryError "backup"
+    !insertmacro dshDirectoryOperation "$dshDirectorySource" "$dshDirectoryDestination" $dshDirectoryError "backup" 10
     ${If} $dshDirectoryError != 0
       Call dshRollbackDirectories
       !insertmacro dshReportDirectoryFailure
@@ -189,7 +233,7 @@ Function dshPromoteDirectories
     ; NSIS can create the destination before the install section starts.
     StrCpy $dshDirectorySource $dshFinalDirectory
     StrCpy $dshDirectoryDestination ""
-    !insertmacro dshDirectoryOperation "$dshDirectorySource" "" $dshDirectoryError "remove-empty"
+    !insertmacro dshDirectoryOperation "$dshDirectorySource" "" $dshDirectoryError "remove-empty" 10
     ${If} $dshDirectoryError != 0
       Call dshRollbackDirectories
       !insertmacro dshReportDirectoryFailure
@@ -200,7 +244,11 @@ Function dshPromoteDirectories
   ClearErrors
   StrCpy $dshDirectorySource $dshNewDirectory
   StrCpy $dshDirectoryDestination $dshFinalDirectory
-  !insertmacro dshDirectoryOperation "$dshDirectorySource" "$dshDirectoryDestination" $dshDirectoryError "promote"
+  ; A scanner holding staged files open blocks the rename for as long as it scans, so promotion soon falls back to copying.
+  !insertmacro dshDirectoryOperation "$dshDirectorySource" "$dshDirectoryDestination" $dshDirectoryError "promote" 3
+  ${If} $dshDirectoryError != 0
+    Call dshCopyStagedDirectory
+  ${EndIf}
   ${If} $dshDirectoryError != 0
     Call dshRollbackDirectories
     !insertmacro dshReportDirectoryFailure

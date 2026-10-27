@@ -52,6 +52,7 @@ import { desktopClientMetadata, desktopClientVersion } from './client-metadata.t
 import { DesktopMandatoryUpdateWindow } from './mandatory-update-window.ts'
 import { DesktopPolicyTestAuth } from './policy-test-auth.ts'
 import { readDesktopSettings } from './settings.ts'
+import { focusAboutWindow, showAboutWindow } from './about-window.ts'
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
@@ -393,10 +394,23 @@ async function main(): Promise<void> {
   }
   // Copy comes from the same locale as the update prompts so the dialog
   // chrome and its content never mix languages.
+  const noticeIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png') : join(process.resourcesPath, 'icon.png')
   const showAbout = async (): Promise<void> => {
-    await ordinaryMessageBox({ type: 'info', title: locale.messages.aboutMenu, message: locale.messages.aboutProduct,
-      detail: formatDesktopMessage(locale.messages.aboutVersion, { version: app.getVersion() }),
-      buttons: [locale.messages.updateAcknowledge], cancelId: 0 })
+    const messages = locale.messages
+    await showAboutWindow(currentDialogWindow(), {
+      title: messages.aboutMenu,
+      heading: [messages.aboutProduct, formatDesktopMessage(messages.aboutVersion, { version: app.getVersion() })],
+      note: formatDesktopMessage(messages.aboutCopyright, { year: String(new Date().getFullYear()) }),
+      ok: messages.updateAcknowledge,
+    }, noticeIconPath, locale.id)
+  }
+  // The first-close tray notice uses the same card; dismissing it without confirming (-1) leaves it pending.
+  const showBackgroundNotice = async (options: UpdateDialogOptions): Promise<Electron.MessageBoxReturnValue> => {
+    const confirmed = await showAboutWindow(currentDialogWindow(), {
+      title: options.title ?? locale.messages.aboutProduct, heading: [options.title ?? locale.messages.aboutProduct],
+      note: options.message, ok: options.buttons?.[0] ?? locale.messages.updateAcknowledge,
+    }, noticeIconPath, locale.id)
+    return { response: confirmed ? 0 : -1, checkboxChecked: false }
   }
   const commandManager = new DesktopCommandManager({
     resources: process.resourcesPath,
@@ -1008,7 +1022,7 @@ async function main(): Promise<void> {
     : []
   const applicationItems = (): MenuItemConstructorOptions[] => [
     // Windows has no system About panel; Electron's fallback is a plain
-    // message box, so the shell shows its own dimmed dialog instead.
+    // message box, so the shell shows its product notice card instead.
     process.platform === 'win32'
       ? { label: currentDesktopLocale().messages.aboutMenu,
         click: () => { void showAbout().catch((error: unknown) => { console.error(error) }) } }
@@ -1053,7 +1067,7 @@ async function main(): Promise<void> {
   }
   const backgroundNotice = process.platform === 'win32'
     ? new DesktopBackgroundNotice({ markerPath: join(app.getPath('userData'), 'background-close-confirmed'),
-      locale: () => locale, show: ordinaryMessageBox, focus: () => { updateDialog.focus() } })
+      locale: () => locale, show: showBackgroundNotice, focus: focusAboutWindow })
     : undefined
   const quitConfirmation = new DesktopQuitConfirmation({
     locale: () => locale,

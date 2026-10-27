@@ -39,7 +39,7 @@ Section
     FileClose $0
     StrCpy $dshDirectorySource $dshNewDirectory
     StrCpy $dshDirectoryDestination $dshFinalDirectory
-    !insertmacro dshDirectoryOperation "$dshDirectorySource" "$dshDirectoryDestination" $dshDirectoryError "promote"
+    !insertmacro dshDirectoryOperation "$dshDirectorySource" "$dshDirectoryDestination" $dshDirectoryError "promote" 3
     Call dshRollbackDirectories
     !insertmacro dshReportDirectoryFailure
     Rename $dshFinalDirectory "${TARGET_DIR}.conflict"
@@ -57,11 +57,16 @@ Section
     RMDir /r "\\?\$dshNewDirectory"
   !endif
   !ifdef LOCKED_STAGE
-    System::Call 'kernel32::CreateFileW(w "$dshNewDirectory\asset.txt", i 0x80000000, i 1, p 0, i 3, i 0, p 0) p.r9'
+    ; The value is the share mode: 1 lets other readers in, like a scanner, and 0 refuses them too.
+    System::Call 'kernel32::CreateFileW(w "$dshNewDirectory\asset.txt", i 0x80000000, i ${LOCKED_STAGE}, p 0, i 3, i 0, p 0) p.r9'
   !endif
   Call dshPromoteDirectories
   IfErrors failed
   !insertmacro dshFinishDirectories
+  !ifdef LOCKED_STAGE
+    System::Call 'kernel32::CloseHandle(p r9)'
+    Call dshCleanupDirectories
+  !endif
   SetErrorLevel 0
   Quit
   failed:
