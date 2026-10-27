@@ -20,7 +20,7 @@ import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
 import { SessionSeq } from '@deepseek-ai/dsh-session'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
 import {
-  chatSnapshot as emptyChatSnapshot, conversationSnapshot, makeTranslate, sessionSnapshot,
+  allowAllAccess, chatSnapshot as emptyChatSnapshot, conversationSnapshot, makeTranslate, sessionSnapshot,
   stubConfigForm, TestSessions, workspaceSnapshot,
 } from '@deepseek-ai/dsh-client-test-runtime'
 import {
@@ -156,7 +156,7 @@ describe('workflow-run Conversation Definition', () => {
     const node = [...(value.snapshot('chat') as ChatSnapshot).nodes.values()][0]!
     expect(node.anchorSeq).toBe(3)
     expect(node.kind).toBe('workflow-run')
-    expect(node.processPlacement).toBe('independent')
+    expect(node.groupTree).toBe('turn')
   })
 
   it('keeps an update-only tail pending until prepend supplies the unique start', () => {
@@ -361,15 +361,14 @@ function panelProps(data: WorkflowRunChatData, sessions = listState(), openSessi
       submit: () => {},
     },
     useWorkspaces: selector => selector(panelWorkspace),
+    ...allowAllAccess,
     useTurnData: () => undefined,
     useDisclosure: () => { throw new Error('unused') },
     useGroupAction: () => { throw new Error('unused') },
-    openSkill: vi.fn(),
     openFile: () => {},
     inspectCall: () => {},
     forkAt: () => {},
     loadImage: () => Promise.reject(new Error('not used')),
-    renderMessageImages: () => null,
     fileMentions: () => undefined,
     openSession,
     t: makeTranslate(zh),

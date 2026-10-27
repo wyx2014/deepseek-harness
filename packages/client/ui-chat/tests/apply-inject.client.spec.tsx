@@ -2,8 +2,7 @@ import { MessageId } from '@deepseek-ai/dsh-llm/brand'
 // @vitest-environment jsdom
 /** Chat inject factories exercised over independently mounted Conversation and Chat plugins. */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { projectUserText, type UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
-import { fireEvent, render } from '@testing-library/react'
+import type { UserTextReference } from '@deepseek-ai/dsh-client-ui-primitives'
 import { describe, expect, it, vi } from 'vitest'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ISession, SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -160,7 +159,7 @@ describe('Chat inject API', () => {
       await vi.waitFor(() => { expect(observed.getSnapshot()).toEqual([]) })
     } finally { await b.runtime.dispose() }
   })
-  it('projects independent Settings choices without saving timing to Host settings', async () => {
+  it('projects independent Settings choices and saves timing to Host settings', async () => {
     const b = await bench()
     try {
       const row = b.runtime.slots.entries('settings.general.item')
@@ -172,12 +171,12 @@ describe('Chat inject API', () => {
       expect(presentation.getSnapshot()).toMatchObject({ mode: 'detailed', collapseTiming: 'completion' })
       setCollapseTiming('next-input')
       expect(presentation.getSnapshot()).toMatchObject({ mode: 'detailed', collapseTiming: 'next-input' })
-      expect(b.chatSettings.set).not.toHaveBeenCalled()
-      b.chatSettings.publish({ status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'standard', performanceUsage: 'detailed' }, revision: 1, writable: true })
+      expect(b.chatSettings.set).toHaveBeenCalledWith('collapseTiming', 'next-input')
+      b.chatSettings.publish({ status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'standard', performanceUsage: 'detailed', collapseTiming: 'next-input' }, revision: 1, writable: true })
       expect(presentation.getSnapshot()).toMatchObject({ mode: 'standard', collapseTiming: 'next-input' })
       setCollapseTiming('completion')
       expect(presentation.getSnapshot()).toMatchObject({ mode: 'standard', collapseTiming: 'completion' })
-      expect(b.chatSettings.set).not.toHaveBeenCalled()
+      expect(b.chatSettings.set).toHaveBeenLastCalledWith('collapseTiming', 'completion')
       expect(b.session.prompt).not.toHaveBeenCalled()
       expect(b.session.cancel).not.toHaveBeenCalled()
     } finally {
@@ -391,7 +390,7 @@ describe('Chat inject API', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     try {
       const { injected } = b.chatViewApi(b.rootReference)
-      b.chatSettings.publish({ mode: 'memory', status: 'unavailable' })
+      b.chatSettings.publish({ status: 'unavailable' })
       b.chatSettings.set.mockResolvedValueOnce(false)
       b.linkPreference.setLinkOpening('new-tab')
       b.chatSettings.publish({ value: undefined })
@@ -410,35 +409,26 @@ describe('Chat inject API', () => {
     }
   })
 
-  it('routes sent skill previews through the viewed Session source and tolerates an absent provider', async () => {
+  it('leaves skill preview injection to the skill reference owner', async () => {
     const b = await bench()
-    const { injected } = b.chatViewApi(b.rootReference)
-    injected.openSkill('review')
-    const openReference = vi.fn(() => true)
-    const sessionOf = vi.fn(() => ({ openReference, textReferences: createSnapshotStore([]) }))
-    b.runtime.ctx.provide('inputTriggers', { sessionOf } as never)
-    injected.openSkill('review')
-    expect(sessionOf).toHaveBeenCalledWith(b.runtime.sessions.scope(ROOT))
-    expect(openReference).toHaveBeenCalledWith('skill', { ref: '/review' })
-    vi.spyOn(b.runtime.sessions, 'scope').mockReturnValueOnce(undefined)
-    injected.openSkill('review')
-    expect(openReference).toHaveBeenCalledTimes(1)
-    await b.runtime.dispose()
+    try {
+      const { injected } = b.chatViewApi(b.rootReference)
+      expect(injected).not.toHaveProperty('openSkill')
+    } finally {
+      await b.runtime.dispose()
+    }
   })
 
-  it('routes a catalog-backed skill click to the sidebar document without the native skill provider', async () => {
+  it('routes a catalog-backed skill document to the sidebar without the native skill provider', async () => {
     const b = await bench()
-    const { injected } = b.chatViewApi(b.rootReference)
-    const view = render(<div>{projectUserText('$review', [], [], 'skill', injected, [
-      { text: '$review', kind: 'skill', name: 'review', path: '/personal/skills/review/SKILL.md' },
-    ])}</div>)
     try {
-      fireEvent.click(view.getByRole('button', { name: '/review' }), { detail: 1 })
+      const entry = b.runtime.slots.entries('conversation.user.text.node').find(row => row.options.key === 'capability')!
+      const injected = (entry.inject as (sessionId: SessionId) => { openFile: (path: string) => void })(b.rootReference.sessionId)
+      injected.openFile('/personal/skills/review/SKILL.md')
       expect(b.sidebarRight.openResource).toHaveBeenCalledWith(
         'dsh-resource://file/session/root-1//personal/skills/review/SKILL.md',
       )
     } finally {
-      view.unmount()
       await b.runtime.dispose()
     }
   })

@@ -192,7 +192,8 @@ export const workflowRunDefinition: ConversationNodeDefinition<WorkflowState> = 
       anchorSeq: context.start.event.seq,
       location: context.start.location,
       visibility: 'visible',
-      processPlacement: 'independent',
+      // Run and phase disclosures stay reachable outside the Turn's process disclosure.
+      groupTree: 'turn',
       data,
     }
   },

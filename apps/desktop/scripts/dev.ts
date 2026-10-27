@@ -99,7 +99,7 @@ async function main(): Promise<void> {
     'rebuild-runtime': { type: 'boolean', default: false },
   } })
   if (!values['skip-build']) {
-    await runPackageScript('build', REPOSITORY_ROOT)
+    await runPackageScript('build:artifacts', REPOSITORY_ROOT)
     await runPackageScript('build', APP_ROOT)
   } else {
     // Reuse the full build, but never launch a shell or page older than its own sources.

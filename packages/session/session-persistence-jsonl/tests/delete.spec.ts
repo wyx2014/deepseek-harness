@@ -8,7 +8,7 @@ import SessionStore, { SESSION_FORMAT_VERSION, SessionId, SessionSeq } from '@de
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
 import { SessionAlreadyExistsError, SessionAlreadyOwnedError, SessionPersistenceChangedError,
   SessionPersistenceNotFoundError, SessionPersistence, SessionDeletionUnsupportedError } from '@deepseek-ai/dsh-session-persistence'
-import JsonlPersistence from '../src/index.ts'
+import * as JsonlPersistence from '../src/index.ts'
 import { sessionDir } from '../src/format.ts'
 import { SessionWriteLease } from '../src/lease.ts'
 
