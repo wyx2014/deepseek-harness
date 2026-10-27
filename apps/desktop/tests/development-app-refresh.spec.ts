@@ -22,6 +22,8 @@ it('rebuilds a registered development application when its selected runtime chan
   mkdirSync(join(source, 'Resources'))
   writeFileSync(join(source, 'Info.plist'), '<plist><dict/></plist>')
   writeFileSync(join(source, 'MacOS', 'Electron'), 'source executable')
+  mkdirSync(join(root, 'resources'))
+  writeFileSync(join(root, 'resources', 'icon.icns'), 'development icon')
   const options = {
     electron: join(source, 'MacOS', 'Electron'), appRoot: root, directory: join(root, 'development'),
     home: join(root, 'home'), userData: join(root, 'user data'),
@@ -38,7 +40,7 @@ it('rebuilds a registered development application when its selected runtime chan
   prepareDevelopmentApp(next)
   expect(copies()).toBe(2)
   expect(readFileSync(executable, 'utf8')).not.toBe(first)
-  const stamp = JSON.parse(readFileSync(join(options.directory, 'Harness Dev.app', 'Contents', 'Resources', 'dsh-development.json'), 'utf8')) as { primaryRuntimeDir: string; launcher: string }
+  const stamp = JSON.parse(readFileSync(join(options.directory, 'TP Cowork.app', 'Contents', 'Resources', 'dsh-development.json'), 'utf8')) as { primaryRuntimeDir: string; launcher: string }
   expect(stamp.primaryRuntimeDir).toBe(next.primaryRuntimeDir)
   expect(stamp.launcher).toBe(readFileSync(executable, 'utf8'))
 })

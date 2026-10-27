@@ -29,6 +29,7 @@ import type {
   Provider,
   ThinkingLevelMap,
 } from '@earendil-works/pi-ai'
+import { withReasoningRules } from './reasoning-rules.ts'
 
 /**
  * Pricing for a model the installed catalog does not describe. The harness
@@ -938,7 +939,7 @@ export function resolveRouteModels(
     // Only a value the profile named is a deployment choice; the catalog's is
     // the model's capability and stays out of request defaults.
     if (entry.maxTokens !== undefined) configuredMaxTokens.set(entry.id, entry.maxTokens)
-    return {
+    const model: Model<Api> = {
       // The installed entry lays the floor, and the fields below override it.
       // Enumerating instead would silently drop every `Model` field this
       // package does not model — reasoning-level spellings, compatibility
@@ -957,6 +958,10 @@ export function resolveRouteModels(
       ...resolveModelReasoning(provider, entry, base),
       ...resolveModelCompat(provider, entry, request.compat, base, api),
     }
+    // A model the installed catalog does not describe and that names no levels takes the reference product's rule
+    // levels; `reasoningEfforts: false` opts out. A catalog model keeps the catalog's verdict: a vendor endpoint may
+    // reject reasoning fields on a model it serves without them.
+    return entry.reasoningEfforts === undefined && base === undefined ? withReasoningRules(model) : model
   }
   const models: Model<Api>[] = []
   for (const entry of entries) {

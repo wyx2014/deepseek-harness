@@ -119,6 +119,15 @@ async function main(): Promise<void> {
       await runPackageScript(artifact.script, artifact.cwd)
     }
   }
+  // TP Cowork's product plugins live in a sibling checkout and load from there, except the browser's desktop half,
+  // which is copied into this app. The product launcher rebuilds whichever changed; it marks a launch it started
+  // itself, having prepared them already.
+  const product = resolve(process.env.DSH_DESKTOP_PRODUCT_DIR ?? join(REPOSITORY_ROOT, '..', 'tp-coworkdsh'))
+  const prepare = join(product, 'scripts', 'dev-desktop.mjs')
+  if (process.env.TPCOWORK_PLUGINS_PREPARED !== '1' && existsSync(prepare)) {
+    console.log('desktop development: preparing TP Cowork plugins')
+    await run(process.execPath, [prepare, '--plugins-only'], product)
+  }
   for (const path of [
     join(APP_ROOT, 'lib', 'main.js'),
     join(REPOSITORY_ROOT, 'apps', 'desktop-host', 'lib', 'index.js'),

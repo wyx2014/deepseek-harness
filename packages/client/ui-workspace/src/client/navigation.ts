@@ -320,12 +320,12 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   async openWorkspace(
     workspaceId: WorkspaceId,
     beforeOpen?: (sessionId: SessionId) => void,
-    reuse: Pick<StartSessionOptions, 'agentPreset' | 'reuseBlank'> = {},
+    options: Pick<StartSessionOptions, 'agentPreset' | 'reuseBlank'> = {},
   ): Promise<void> {
     const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
     let sessionId: SessionId
     try {
-      sessionId = await this.connectBlank(workspaceId, reuse)
+      sessionId = await this.connectBlank(workspaceId, options)
     } catch (error: unknown) {
       // Reported here, not in connectWorkspace: startup restoration calls that
       // directly and stays console-only.

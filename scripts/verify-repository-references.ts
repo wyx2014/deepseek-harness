@@ -49,7 +49,11 @@ export function findRepositoryReferences(
     if (organizationUrl.test(canonicalReferenceText(line).replace(kitRepositoryUrl, ''))) {
       references.push({ file, line: index + 1, kind: 'organization-url' })
     }
-    if ([...line.matchAll(commitCandidate)].some(match => commits.has(match[0].toLowerCase()))) {
+    // Registry artifact byte counts can coincide with abbreviated commit identifiers.
+    const commitText = /(?:^|\/)uv\.lock$/.test(file)
+      ? line.replace(/([,{]\s*size\s*=\s*)\d+(?=\s*[,}])/g, '$1<byte-count>')
+      : line
+    if ([...commitText.matchAll(commitCandidate)].some(match => commits.has(match[0].toLowerCase()))) {
       references.push({ file, line: index + 1, kind: 'commit-hash' })
     }
   }

@@ -139,6 +139,8 @@ export interface ModelCatalogModel {
   readonly name: string
   readonly description?: string
   readonly reasoning?: ModelReasoning
+  /** Input kinds the model accepts; pickers badge image input. */
+  readonly inputModalities?: readonly ('text' | 'image')[]
 }
 
 /** One provider and its successfully loaded model catalog. */

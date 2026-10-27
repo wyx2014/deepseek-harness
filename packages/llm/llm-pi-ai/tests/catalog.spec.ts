@@ -108,19 +108,53 @@ describe('hand-declared providers', () => {
     })
   })
 
-  it('offers no reasoning control it could not honour', async () => {
-    const server = await mockServer([])
+  it('gives a hand-declared model without levels the reference product\'s rule levels and spells them on the wire', async () => {
+    const server = await mockServer([{ events: textEvents }, { events: textEvents }, { events: textEvents }])
     const ctx = await harness(gateway(`${server.url}/v1`))
+    // The reference product's catch-all rule: two levels, a new selection thinks.
+    expect((await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')).reasoning).toEqual({
+      efforts: [{ id: ReasoningEffortId('disabled'), name: 'Disabled' }, { id: ReasoningEffortId('enabled'), name: 'Enabled' }],
+      defaultEffort: ReasoningEffortId('enabled'),
+    })
+    const send = (reasoningEffort?: string) => assemble(ctx, {
+      provider: 'acme-gateway',
+      model: 'acme-large',
+      ...reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
+      messages: [createUserMessage({ content: [{ type: 'text', text: 'hi' }], source: { kind: 'test' } })],
+    })
+    await send('disabled')
+    await send('enabled')
+    await send()
+    // Chat Completions gateways read different fields, so every common spelling travels.
+    expect(server.requests.map((body) => {
+      const { thinking, enable_thinking, reasoning_effort, reasoning } = body as Record<string, unknown>
+      return { thinking, enable_thinking, reasoning_effort, reasoning }
+    })).toEqual([
+      { thinking: { type: 'disabled' }, enable_thinking: false, reasoning_effort: 'none', reasoning: { effort: 'none' } },
+      { thinking: { type: 'enabled' }, enable_thinking: true, reasoning_effort: 'high', reasoning: { effort: 'high' } },
+      { thinking: { type: 'enabled' }, enable_thinking: true, reasoning_effort: 'high', reasoning: { effort: 'high' } },
+    ])
+    await expect(send('max')).resolves.toMatchObject({
+      finish: { kind: 'error', failure: { code: 'UNSUPPORTED_REASONING_EFFORT' } },
+    })
 
-    // pi-ai reports a model with no reasoning metadata as supporting the single
-    // level `off`, but `off` is translated to *omitting* the reasoning option —
-    // byte-for-byte the same request as naming no effort — so a provider whose
-    // own default is to think would keep thinking with `off` selected. The
-    // capability is reported unavailable instead of offering that control.
-    expect((await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')).reasoning).toBeUndefined()
+    // `reasoningEfforts: false` declares a non-reasoning model.
+    const plain = await harness(gateway(`${server.url}/v1`, {
+      models: [{ id: 'acme-large', name: 'Acme Large', reasoningEfforts: false }],
+    }))
+    expect((await plain.llm.resolveModelInfo('acme-gateway', 'acme-large')).reasoning).toBeUndefined()
 
-    // A catalog route is unaffected: its models carry the metadata that makes
-    // `off` actually disable thinking.
+    // A model the rules name gets its own levels and spelling: here DeepSeek over Anthropic Messages.
+    const deepseek = await harness({ providers: { 'my-deepseek': {
+      apiKeyEnv: KEY_ENV, api: 'anthropic-messages', baseURL: 'https://api.deepseek.com',
+      models: [{ id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash' }],
+    } } })
+    expect((await deepseek.llm.resolveModelInfo('my-deepseek', 'deepseek-flash')).reasoning).toMatchObject({
+      efforts: ['disabled', 'low', 'high', 'max'].map(id => ({ id: ReasoningEffortId(id) })),
+      defaultEffort: ReasoningEffortId('max'),
+    })
+
+    // A catalog route keeps the catalog's levels.
     const withCatalog = await harness({ providers: { deepseek: { baseURL: server.url } } })
     const [catalogModel] = getBuiltinModels('deepseek')
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')

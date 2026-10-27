@@ -62,6 +62,8 @@ import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { requestImageTarget, toPiContext } from './context.ts'
 import { conversationUpdates, createModels, getSupportedThinkingLevels } from './models.ts'
 import { toStreamChunks } from './stream.ts'
+import { applyReasoningLevel, reasoningSpecOf } from './reasoning-rules.ts'
+import type { ReasoningSpec } from './reasoning-rules.ts'
 
 /**
  * Initially active declaration added to an Anthropic request whose projected
@@ -166,6 +168,31 @@ function describableReasoningLevel(
     : undefined
 }
 
+/**
+ * The rule level a rule-described model runs at: the requested one, else the profile's when the rules offer it, else
+ * the greatest, the reference product's choice for a new selection.
+ * @param model - the model, for diagnostics.
+ * @param spec - the model's rule-resolved spec.
+ * @param requested - the request's effort, if any.
+ * @param configured - the profile's configured effort, if any.
+ * @returns a level from the spec.
+ */
+function resolveRuleLevel(
+  model: Model<Api>,
+  spec: ReasoningSpec,
+  requested: ReasoningEffortIdType | undefined,
+  configured: ModelThinkingLevel | undefined,
+): string {
+  if (requested === undefined) {
+    return configured !== undefined && spec.values.includes(configured) ? configured : spec.values.at(-1) as string
+  }
+  if (spec.values.includes(requested)) return requested
+  throw new LlmError(
+    `pi-ai provider "${model.provider}" model "${model.id}" does not support reasoning effort "${requested}"`,
+    'UNSUPPORTED_REASONING_EFFORT',
+  )
+}
+
 /** Validate an explicit Harness/profile effort without invoking pi-ai's clamp. */
 function resolveReasoningLevel(
   model: Model<Api>,
@@ -200,6 +227,18 @@ function reasoningInfo(
   model: Model<Api>,
   defaultLevel: ModelThinkingLevel | undefined,
 ): Pick<LlmResolvedModelInfo, 'reasoning'> | Record<string, never> {
+  const spec = reasoningSpecOf(model)
+  if (spec !== undefined) {
+    return {
+      reasoning: {
+        efforts: spec.values.map(level => ({
+          id: ReasoningEffortId(level),
+          name: `${level.charAt(0).toUpperCase()}${level.slice(1)}`,
+        })),
+        defaultEffort: ReasoningEffortId(resolveRuleLevel(model, spec, undefined, defaultLevel)),
+      },
+    }
+  }
   if (!model.reasoning) return {}
   const levels = getSupportedThinkingLevels(model)
   return {
@@ -325,7 +364,9 @@ export class PiAiAdapter extends LlmAdapter {
   private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
     const resolvedModel = this.modelOf(snapshot, provider, model)
-    const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
+    const defaultLevel = reasoningSpecOf(resolvedModel) !== undefined
+      ? profile.reasoning
+      : describableReasoningLevel(resolvedModel, profile.reasoning)
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
     const configuredMaxTokens = profile.configuredMaxTokens.get(model)
@@ -377,7 +418,10 @@ export class PiAiAdapter extends LlmAdapter {
     const request = needsPlaceholder
       ? { ...options, tools: [ANTHROPIC_TOOL_UPDATE_PLACEHOLDER, ...tools] }
       : options
-    const reasoning = resolveReasoningLevel(
+    // A rule-described model is non-reasoning to pi-ai; its level travels as a body patch instead.
+    const spec = reasoningSpecOf(model)
+    const ruleLevel = spec === undefined ? undefined : resolveRuleLevel(model, spec, options.reasoningEffort, profile.reasoning)
+    const reasoning = spec !== undefined ? undefined : resolveReasoningLevel(
       model,
       options.reasoningEffort ?? profile.reasoning,
     )
@@ -418,6 +462,9 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
+        ...spec === undefined || ruleLevel === undefined
+          ? {}
+          : { onPayload: (payload: unknown) => applyReasoningLevel(payload, spec, ruleLevel) },
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
