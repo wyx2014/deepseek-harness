@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { CredentialInfo } from '@deepseek-ai/dsh-credentials/types'
@@ -46,6 +47,7 @@ describe('the credentials Remote namespace a configuration surface calls', () =>
     expect(binding.namespace).toBe('credentials')
     expect(remoteMethods(controller)).toEqual([
       { method: 'describe', invocation: { kind: 'direct' } },
+      { method: 'reveal', invocation: { kind: 'direct' } },
       { method: 'set', invocation: { kind: 'direct' } },
       { method: 'unset', invocation: { kind: 'direct' } },
     ])
@@ -135,4 +137,20 @@ describe('the credentials Remote namespace a configuration surface calls', () =>
     const failure = await controller.set('DEEPSEEK_API_KEY', 'sk-live').catch((error: unknown) => error)
     expect(remoteErrorOf(failure)?.message).toBe('the store refused')
   })
+})
+
+it('encrypts revealed credentials for the requesting ephemeral browser key', async () => {
+  const controller = await boot({ TEST_KEY: 'sk-explicit-reveal' })
+  const pair = await webcrypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey'])
+  const publicKey = Buffer.from(await webcrypto.subtle.exportKey('spki', pair.publicKey)).toString('base64')
+  const envelope = await controller.reveal('TEST_KEY', publicKey)
+  expect(JSON.stringify(envelope)).not.toContain('sk-explicit-reveal')
+  const peer = await webcrypto.subtle.importKey('spki', Buffer.from(envelope.publicKey, 'base64'), { name: 'ECDH', namedCurve: 'P-256' }, false, [])
+  const key = await webcrypto.subtle.deriveKey({ name: 'ECDH', public: peer }, pair.privateKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
+  const algorithm = { name: 'AES-GCM', iv: Buffer.from(envelope.iv, 'base64'), additionalData: new TextEncoder().encode('TEST_KEY') }
+  const plain = await webcrypto.subtle.decrypt(algorithm, key, Buffer.from(envelope.ciphertext, 'base64'))
+  expect(new TextDecoder().decode(plain)).toBe('sk-explicit-reveal')
+  await expect(webcrypto.subtle.decrypt({ ...algorithm, additionalData: new TextEncoder().encode('OTHER_KEY') }, key, Buffer.from(envelope.ciphertext, 'base64'))).rejects.toThrow()
+  await expect(controller.reveal('TEST_KEY', 'invalid')).rejects.toThrow('invalid reveal public key')
+  await expect(controller.reveal('MISSING_KEY', publicKey)).rejects.toThrow('credential is not configured')
 })

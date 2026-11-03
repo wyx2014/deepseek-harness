@@ -32,6 +32,11 @@ export type ModelDiscoveryOutcome =
 
 /** The Host operations the Models page and its cards invoke. */
 export interface ModelsOperations {
+  /** Send one bounded connectivity probe without creating a conversation. */
+  testModel(provider: string, model: string): Promise<{ ok: boolean; message: string }>
+  /** Explicit reveal: decrypt an encrypted Host response in transient browser memory. */
+  revealCredential(ref: string): Promise<string>
+
   /**
    * Store one credential literal under its reference.
    * @param ref - credential reference name.
@@ -75,6 +80,25 @@ export interface ModelsOperations {
  */
 export function createModelsOperations(ctx: ClientContext): ModelsOperations {
   return {
+    testModel: async (provider, model) => {
+      const response = await ctx.remote.llm.testModel(provider, model)
+      if (!response.ok) throw new Error(response.error.message)
+      return response.value
+    },
+    revealCredential: async (ref) => {
+      const crypto = globalThis.crypto
+      const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey'])
+      const encode = (bytes: ArrayBuffer): string => btoa(String.fromCharCode(...new Uint8Array(bytes)))
+      const decode = (value: string): Uint8Array<ArrayBuffer> => Uint8Array.from(atob(value), char => char.charCodeAt(0))
+      const publicKey = encode(await crypto.subtle.exportKey('spki', pair.publicKey))
+      const response = await ctx.remote.credentials.reveal(ref, publicKey)
+      if (!response.ok) throw new Error(response.error.message)
+      const envelope = response.value
+      const peer = await crypto.subtle.importKey('spki', decode(envelope.publicKey), { name: 'ECDH', namedCurve: 'P-256' }, false, [])
+      const key = await crypto.subtle.deriveKey({ name: 'ECDH', public: peer }, pair.privateKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
+      const value = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decode(envelope.iv), additionalData: new TextEncoder().encode(ref) }, key, decode(envelope.ciphertext))
+      return new TextDecoder().decode(value)
+    },
     storeCredential: async (ref, value) => {
       const response = await ctx.remote.credentials.set(ref, value)
       return response.ok ? undefined : response.error.message

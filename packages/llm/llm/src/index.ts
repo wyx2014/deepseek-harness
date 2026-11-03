@@ -661,6 +661,31 @@ export class LlmRuntime extends TypertRemoteService {
   }
 
   /**
+   * Explicit settings connectivity probe. Sends one short user request without
+   * creating a Session or returning generated content. Cancellation and a
+   * 15-second timeout bound the call; error finishes are never reported as success.
+   * @param provider - enabled registered provider.
+   * @param model - enabled configured model.
+   * @param signal - Remote cancellation.
+   * @returns connectivity result safe to display beside the model row.
+   */
+  @Remote
+  async testModel(provider: string, model: string, signal: AbortSignal): Promise<{ ok: boolean; message: string }> {
+    const bounded = AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+    try {
+      await this.resolveModelInfo(provider, model, bounded)
+      for await (const chunk of this.stream({ provider, model, messages: [{ role: 'user', content: [{ type: 'text', text: 'Reply OK.' }] }], maxTokens: 32, signal: bounded })) {
+        if (chunk.type !== 'finish') continue
+        if (chunk.reason.kind === 'error' || chunk.reason.kind === 'aborted') return { ok: false, message: chunk.reason.failure.message }
+        return { ok: true, message: '连接成功' }
+      }
+      return { ok: false, message: '连接结束，但未收到完整响应' }
+    } catch (error: unknown) {
+      return { ok: false, message: bounded.aborted ? '连接测试已取消或超时' : error instanceof Error ? error.message : '连接失败' }
+    }
+  }
+
+  /**
    * Resolve the retry policy captured when one provider route was registered.
    * @param provider - registered provider route to inspect.
    * @returns the provider-owned policy, with normal defaults already resolved.

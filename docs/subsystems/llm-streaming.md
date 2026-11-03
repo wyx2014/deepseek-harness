@@ -1047,6 +1047,17 @@ async discoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, sig
 @Remote('discoverModels') async remoteDiscoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal, ): Promise<LlmDiscoveredModel[]>
 
 /**
+ * Explicit settings connectivity probe. Sends one short user request without
+ * creating a Session or returning generated content. Cancellation and a
+ * 15-second timeout bound the call; error finishes are never reported as success.
+ * @param provider - enabled registered provider.
+ * @param model - enabled configured model.
+ * @param signal - Remote cancellation.
+ * @returns connectivity result safe to display beside the model row.
+ */
+@Remote async testModel(provider: string, model: string, signal: AbortSignal): Promise<{ ok: boolean; message: string }>
+
+/**
  * Resolve the retry policy captured when one provider route was registered.
  * @param provider - registered provider route to inspect.
  * @returns the provider-owned policy, with normal defaults already resolved.

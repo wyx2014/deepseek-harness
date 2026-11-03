@@ -5,6 +5,7 @@
  * @module @deepseek-ai/dsh-api-settings-controller/src/credentials.ts
  */
 
+import { webcrypto } from 'node:crypto'
 import { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
@@ -61,8 +62,8 @@ declare module '@deepseek-ai/cordis' {
  * Host service backing the generated `ctx.remote.credentials` namespace. It
  * carries every wire obligation the credential seam itself does not: the batch
  * fan-out bound, the field-by-field view projection, the reference-grammar
- * guard, and the refusal mapping. Secret values cross in one direction only —
- * no method here returns one.
+ * guard, and the refusal mapping. Secret plaintext crosses into the Host only —
+ * only explicit reveal returns an encrypted value.
  */
 export class CredentialsController extends TypertRemoteService {
   /** @param ctx - Host context where a credential provider may be mounted. */
@@ -87,6 +88,41 @@ export class CredentialsController extends TypertRemoteService {
     const entries = await Promise.all(branded.map(async ([ref, key]) =>
       [ref, projectCredentialInfo(await credentials.describe(key))] as const))
     return Object.fromEntries(entries)
+  }
+
+  /**
+   * Reveal a reference only on an explicit authenticated settings request.
+   * The browser supplies an ephemeral P-256 SPKI key. ECDH derives a one-use
+   * AES-256-GCM key; the response carries ciphertext, never the credential.
+   * Authentication remains the Gateway's responsibility; encryption is not
+   * a replacement for HTTPS or authenticated access.
+   * @param ref - configured credential reference.
+   * @param publicKey - base64 SPKI ephemeral browser public key.
+   * @returns ephemeral server public key, IV and authenticated ciphertext (base64).
+   */
+  @Remote
+  async reveal(ref: string, publicKey: string): Promise<{ publicKey: string; iv: string; ciphertext: string }> {
+    const request = parseRequest('credentials.reveal', z.object({
+      ref: credentialRefSchema,
+      publicKey: z.string().min(1).max(256).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+    }), { ref, publicKey })
+    let peer: webcrypto.CryptoKey
+    try {
+      peer = await webcrypto.subtle.importKey('spki', Buffer.from(request.publicKey, 'base64'), { name: 'ECDH', namedCurve: 'P-256' }, false, [])
+    } catch {
+      throw new RemoteError('gateway/bad-request', 'invalid reveal public key', {})
+    }
+    const resolved = await this.provider().resolve(credentialRef(request.ref))
+    if (resolved === undefined) throw new RemoteError('credential/rejected', 'credential is not configured', { ref: request.ref })
+    const pair = await webcrypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey'])
+    const key = await webcrypto.subtle.deriveKey({ name: 'ECDH', public: peer }, pair.privateKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt'])
+    const iv = webcrypto.getRandomValues(new Uint8Array(12))
+    const ciphertext = await webcrypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(request.ref) }, key, new TextEncoder().encode(resolved.value))
+    return {
+      publicKey: Buffer.from(await webcrypto.subtle.exportKey('spki', pair.publicKey)).toString('base64'),
+      iv: Buffer.from(iv).toString('base64'),
+      ciphertext: Buffer.from(ciphertext).toString('base64'),
+    }
   }
 
   /**

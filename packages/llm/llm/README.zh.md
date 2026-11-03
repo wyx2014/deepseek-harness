@@ -140,6 +140,8 @@ const configure = (maxTokens: number): ConfigureCall =>
 
 </details>
 
+经过认证的 `llm.testModel(provider, model)` Remote 方法对已启用的配置模型执行显式连接测试。它发送一个最多输出 32 个 token、取消时限为 15 秒的短请求，不创建 Session，仅返回成功或失败消息，不返回生成内容。缺少终止分片，或收到 error/aborted 终止结果时，均视为失败。
+
 -----
 
 <a id="further-exploration"></a>

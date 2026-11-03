@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@deepseek-ai/dsh-api-settings-controller` exposes generated `ctx.remote.settings` and `ctx.remote.credentials` namespaces for browser configuration surfaces. It returns redacted settings and credential metadata, supports settings and credential writes without returning secret values, and opens provider-owned settings or Agent preset locations on the Host desktop. When a provider is absent, the namespace remains registered and returns an actionable configuration error.
+`@deepseek-ai/dsh-api-settings-controller` exposes generated `ctx.remote.settings` and `ctx.remote.credentials` namespaces for browser configuration surfaces. It returns redacted settings and credential metadata, supports settings and credential writes, reveals a credential only through an explicit encrypted response for an ephemeral browser key, and opens provider-owned settings or Agent preset locations on the Host desktop. When a provider is absent, the namespace remains registered and returns an actionable configuration error.
 
 ## Table of Contents
 
@@ -67,3 +67,5 @@ No direct effect; reading or writing these configuration values does not alter m
 None.
 
 </details>
+
+Credential reveal uses an authenticated Gateway request with an ephemeral P-256 SPKI browser public key. The Host derives a fresh AES-256-GCM key via ECDH and returns only its ephemeral public key, random IV and ciphertext; the credential reference is authenticated additional data. Ordinary metadata and settings reads still omit values. This does not replace HTTPS or Gateway authentication. No reveal response is persisted by this service.

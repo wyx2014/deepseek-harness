@@ -195,3 +195,5 @@ This Dev Note is non-authoritative working context: open questions and undecided
 - The `llm/adapters-updated` event is payload-free by design; consumers re-read the registries instead of receiving the new topology in the event.
 
 </details>
+
+The authenticated `llm.testModel(provider, model)` Remote method runs an explicit settings connectivity probe against an enabled configured model. It sends one short request with at most 32 output tokens and a 15-second cancellation bound, creates no Session, and returns only success or a failure message rather than generated content. A missing finish or an error/aborted finish is a failure.

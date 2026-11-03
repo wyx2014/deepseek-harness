@@ -77,6 +77,8 @@ kind: "package-reference"
 | `apiKeyEnv` | 无 | 按请求解析的凭据引用；省略时交由 pi-ai 环境发现 |
 | `displayName` | 提供方名 | 选择器界面显示的标签 |
 | `api` | 目录协议 | 协议格式；仅目录不提供的路由需要 |
+| `disabledModels` | `[]` | 保留模型描述，但将这些 ID 排除在选择与直接调用之外 |
+| `enabled` | `true` | 设为 `false` 时撤销可调用路由，同时保留可配置的 profile |
 | `baseURL` | 目录端点 | 路由上所有模型的端点 |
 | `models` | 已安装目录 | 整体替换路由目录；每个条目从已安装模型取默认值 |
 | `modelOverrides` | 无 | 重塑个别已安装目录模型，而不替换其余模型 |

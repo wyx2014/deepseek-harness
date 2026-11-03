@@ -310,6 +310,7 @@ export class PiAiAdapter extends LlmAdapter {
   /** The configured descriptor for one exact route/model pair within one snapshot. */
   private modelOf(snapshot: PiAiSnapshot, provider: string, model: string): Model<Api> {
     const profile = this.profileOf(snapshot, provider)
+    if (profile.disabledModels?.includes(model)) throw new LlmError(`Model ${model} is disabled`, 'UNKNOWN_MODEL')
     const failure = profile.modelErrors.get(model)
       ?? (profile.piProvider === undefined ? profile.catalogError : undefined)
     if (failure !== undefined) throw new LlmError(failure, 'INVALID_CONFIG')
@@ -341,7 +342,7 @@ export class PiAiAdapter extends LlmAdapter {
         if (error instanceof LlmError && error.code === 'MISSING_CREDENTIAL') return []
         throw error
       }
-      return snapshot.models.getModels(provider).map(model => ({
+      return snapshot.models.getModels(provider).filter(model => !profile.disabledModels?.includes(model.id)).map(model => ({
         provider,
         id: model.id,
         name: model.name,

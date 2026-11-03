@@ -76,6 +76,32 @@ describe('login flows in a real composition', () => {
 })
 
 describe('request-level dynamic profiles', () => {
+  it('retains disabled model metadata while blocking selection and direct calls', async () => {
+    const profile = { api: 'openai-completions', baseURL: 'https://example.test/v1', apiKeyEnv: 'MODEL_TEST_KEY', models: [{ id: 'first', contextWindow: 1000000 }, { id: 'second' }] }
+    const ctx = await boot(await home(), { providers: { custom: profile } })
+    await ctx.credentials.set(credentialRef('MODEL_TEST_KEY'), 'fake-key')
+    expect((await ctx.llm.listModels('custom')).map(model => model.id)).toEqual(['first', 'second'])
+    await configurations.get(ctx)!.replace({ providers: { custom: { ...profile, disabledModels: ['first', 'second'] } } })
+    expect(await ctx.llm.listModels('custom')).toEqual([])
+    await expect(ctx.llm.resolveModelInfo('custom', 'first')).rejects.toThrow('disabled')
+    const chunks = []
+    for await (const chunk of ctx.llm.stream({ provider: 'custom', model: 'first', messages: [] })) chunks.push(chunk)
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: { kind: 'error' } })
+    await configurations.get(ctx)!.replace({ providers: { custom: profile } })
+    expect((await ctx.llm.resolveModelInfo('custom', 'first')).context?.contextWindow).toBe(1000000)
+  })
+
+  it('keeps disabled profiles editable while withdrawing their callable routes', async () => {
+    const profile = { api: 'openai-completions', baseURL: 'https://example.test/v1', models: [{ id: 'test-model' }] }
+    const ctx = await boot(await home(), { providers: { custom: profile } })
+    expect(ctx.llm.listProviders().some(provider => provider.id === 'custom')).toBe(true)
+    await configurations.get(ctx)!.replace({ providers: { custom: { ...profile, enabled: false } } })
+    expect(ctx.llm.listProviders().some(provider => provider.id === 'custom')).toBe(false)
+    expect(ctx.llm.listConfigurableProviders().some(provider => provider.provider === 'custom')).toBe(true)
+    await configurations.get(ctx)!.replace({ providers: { custom: { ...profile, enabled: true } } })
+    expect(ctx.llm.listProviders().some(provider => provider.id === 'custom')).toBe(true)
+  })
+
   it('keeps stored catalog failures editable while isolating requests and validating changed providers', async () => {
     vi.stubEnv('PI_DYNAMIC_KEY', '')
     const dir = await home()

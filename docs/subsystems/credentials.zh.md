@@ -228,7 +228,7 @@ Source: [`packages/credentials/credentials/src/index.ts`](../../packages/credent
 
 ### `ctx.credentialsController` — `CredentialsController`
 
-Host service backing the generated `ctx.remote.credentials` namespace. It carries every wire obligation the credential seam itself does not: the batch fan-out bound, the field-by-field view projection, the reference-grammar guard, and the refusal mapping. Secret values cross in one direction only — no method here returns one.
+Host service backing the generated `ctx.remote.credentials` namespace. It carries every wire obligation the credential seam itself does not: the batch fan-out bound, the field-by-field view projection, the reference-grammar guard, and the refusal mapping. Secret plaintext crosses into the Host only — only explicit reveal returns an encrypted value.
 
 ```ts cordis-catalog
 /**
@@ -241,6 +241,18 @@ Host service backing the generated `ctx.remote.credentials` namespace. It carrie
  * @throws RemoteError when the request is invalid or no credential provider is mounted.
  */
 @Remote async describe(refs: string[]): Promise<Record<string, CredentialInfo>>
+
+/**
+ * Reveal a reference only on an explicit authenticated settings request.
+ * The browser supplies an ephemeral P-256 SPKI key. ECDH derives a one-use
+ * AES-256-GCM key; the response carries ciphertext, never the credential.
+ * Authentication remains the Gateway's responsibility; encryption is not
+ * a replacement for HTTPS or authenticated access.
+ * @param ref - configured credential reference.
+ * @param publicKey - base64 SPKI ephemeral browser public key.
+ * @returns ephemeral server public key, IV and authenticated ciphertext (base64).
+ */
+@Remote async reveal(ref: string, publicKey: string): Promise<{ publicKey: string; iv: string; ciphertext: string }>
 
 /**
  * Store one value from a configuration surface. The value crosses the wire in
