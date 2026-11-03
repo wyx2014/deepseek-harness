@@ -42,6 +42,19 @@ ManifestDPIAware true
     Quit
   ${EndIf}
   !insertmacro setInstallModePerUser
+  ; Intranet security policies can refuse file replacement to programs started outside the system drive, while
+  ; standard users cannot write Program Files. A new installation whose profile lives on another drive therefore
+  ; defaults to a system-drive root folder; a registered installation and an explicit /D= keep their folder.
+  ReadRegStr $0 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+  !insertmacro GetDParameter $1
+  ${If} $0 == ""
+  ${AndIf} $1 == ""
+    StrCpy $2 $WINDIR 2
+    StrCpy $3 $INSTDIR 2
+    ${If} $2 != $3
+      StrCpy $INSTDIR "$2\${APP_FILENAME}"
+    ${EndIf}
+  ${EndIf}
   StrCpy $hasPerMachineInstallation 0
   StrCpy $hasPerUserInstallation 1
   StrCpy $InstallerPath $INSTDIR

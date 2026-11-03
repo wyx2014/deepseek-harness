@@ -204,13 +204,8 @@ Function InstallerRender
         ShowWindow $InstallerLaunch 5
     ${Else}
         ${NSD_SetText} $InstallerButton "$(INSTALLER_INSTALL)"
-        ${If} $InstallerExpanded == 1
-            ShowWindow $InstallerEditFrame 5
-            ShowWindow $InstallerEdit 5
-            ShowWindow $InstallerBrowse 5
-        ${Else}
-            ShowWindow $InstallerChoose 5
-        ${EndIf}
+        ; The product installs only to its default or registered folder. The hidden path controls keep carrying
+        ; that folder, including an explicit /D=, to the preflight check and installer automation.
     ${EndIf}
 FunctionEnd
 

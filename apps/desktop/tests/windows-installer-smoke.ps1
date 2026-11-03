@@ -137,20 +137,9 @@ try {
     $results.Add('welcome-presented-on-first-show')
     $window = [InstallerCapture]::Find($process.Id)
     [void][InstallerCapture]::Save($window, (Join-Path $OutputDirectory 'light-welcome.png'))
-    Click-Control $process $copy.INSTALLER_CHOOSE_PATH
-    $edit = Wait-Control $process $installPath
-    [void][InstallerCapture]::Save($window, (Join-Path $OutputDirectory 'light-path.png'))
-    Click-Control $process $copy.INSTALLER_BROWSE
-    Dismiss $process $copy.INSTALLER_CHOOSE_PATH
-    [void][InstallerCapture]::SendMessage($window, 0x28, $edit, [IntPtr]1)
-    $driveRoot = [IO.Path]::GetPathRoot($installPath)
-    foreach ($invalidPath in @('C:\Windows\Harness Installer Test', $driveRoot, ($driveRoot + '\'), ($driveRoot + '\\'))) {
-        [void][InstallerCapture]::SendMessage($edit, 0xC, [IntPtr]::Zero, $invalidPath)
-        [void][InstallerCapture]::PostMessage($edit, 0x100, [IntPtr]13, [IntPtr]::Zero)
-        Dismiss $process $copy.INSTALLER_PATH_INVALID
-    }
-    $results.Add('canonical-drive-roots-rejected-before-ownership-check')
-    [void][InstallerCapture]::SendMessage($edit, 0xC, [IntPtr]::Zero, $installPath)
+    $welcome = [InstallerCapture]::VisibleText($process.Id)
+    if ($welcome.Contains($copy.INSTALLER_CHOOSE_PATH) -or $welcome.Contains($copy.INSTALLER_BROWSE)) { throw 'Welcome page offers a location choice' }
+    $results.Add('location-choice-hidden')
     [InstallerCapture]::MoveBy($window, 73, -41)
     $bounds = [InstallerCapture]::Bounds($window)
     Click-Control $process $copy.INSTALLER_INSTALL
@@ -181,10 +170,7 @@ try {
     }
     $results.Add('locked-directory-shows-error-and-copy-control-and-preserves-installation')
 
-    $process = Start-Setup dark ''
-    Click-Control $process $copy.INSTALLER_CHOOSE_PATH
-    $edit = Wait-Control $process $installPath
-    [void][InstallerCapture]::SendMessage($edit, 0xC, [IntPtr]::Zero, ($installPath + '\\'))
+    $process = Start-Setup dark ($installPath + '\\')
     [void][InstallerCapture]::Save([InstallerCapture]::Find($process.Id), (Join-Path $OutputDirectory 'dark-welcome.png'))
     $bounds = [InstallerCapture]::Bounds([InstallerCapture]::Find($process.Id))
     Click-Control $process $copy.INSTALLER_INSTALL
