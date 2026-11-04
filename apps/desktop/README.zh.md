@@ -36,6 +36,8 @@ Desktop 在原生应用中运行 Harness 工作区。本参考文档说明应用
 
 Desktop 绑定 `127.0.0.1`，即 Electron 为就绪 URL 与 WebSocket 凭据过滤器拨号的地址。WebSocket 流按 Host 监听器使用 `ws:` 或 `wss:`；附加凭据要求 authority 与 scheme 均匹配。原生欢迎页、产品账号 HTTP 请求与账号状态流仅携带当前 Host 的认证 Cookie，不读取 Chromium Cookie 存储，避免历史监听端口的 Cookie 累积后超过 Host 的请求头大小上限。
 
+已安装产品在现有 Desktop profile 启动时启用新分发的默认 bundle。profile 在其 `package.json` 中记录已提供的默认项；后续启动保留单独禁用的 bundle、外部插件、设置和会话。没有该记录的 profile 会一次性补入当前产品默认项。恢复操作禁用所有第三方 bundle 及默认项自动启用。启用记录无效时停止准备 profile，保留原文件。
+
 应用菜单第一项“**关于 TP Cowork**”打开 Electron 原生关于面板，展示应用图标、产品名称和当前安装的发布版本。菜单文案跟随桌面壳的语言。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 TP Cowork 产品名称。这些条目保留原生动作和快捷键。macOS 从应用包读取图标，因此未打包的开发启动会显示 Electron 图标；Windows 使用随包分发的 PNG。
 
 产品通知 API 在所有应用窗口均未聚焦时显示原生任务通知，并在三秒内抑制相同键的重复通知。点击通知会聚焦主窗口，并将目标返回给发起请求的渲染进程。Windows 安装包使用安装器的应用标识投递通知。
