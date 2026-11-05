@@ -1,9 +1,11 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { runInNewContext } from 'node:vm'
 import { afterEach, expect, it } from 'vitest'
 import yaml from 'js-yaml'
 import { pnpmCommand } from '../../../scripts/release/process.ts'
@@ -42,12 +44,43 @@ it('classifies the current workspace and shares only runtime patch bytes', () =>
   const repository = resolve(import.meta.dirname, '../../..')
   const before = readFileSync(join(repository, 'pnpm-lock.yaml'))
   const plan = prepareRuntimePatches(project, repository)
-  expect(plan.patches.map(entry => entry.spec)).toEqual(['@earendil-works/pi-ai@1.1.0', 'node-pty@1.2.0-beta.15'])
+  expect(plan.patches.map(entry => entry.spec)).toEqual([
+    '@earendil-works/pi-ai@1.1.0', '@deepseek-ai/libreoffice-kit@0.1.5', 'node-pty@1.2.0-beta.15',
+  ])
   expect(plan.workspaceOnly).toHaveLength(6)
   const settings = yaml.load(readFileSync(join(project, 'pnpm-workspace.yaml'), 'utf8')) as { overrides: Record<string, string> }
   expect(settings.overrides['@earendil-works/pi-ai']).toBeUndefined()
   expect(settings.overrides['@earendil-works/pi-ai@^1.1.0']).toBe('1.1.0')
-  expect(readFileSync(join(repository, 'pnpm-lock.yaml'))).toEqual(before)
+  expect(readFileSync(join(repository, 'pnpm-lock.yaml')).equals(before)).toBe(true)
+})
+
+it('patches the published Office API and CLI to distinguish absent ASAR paths from incomplete packages', async () => {
+  const { root, project } = fixture()
+  const repository = resolve(import.meta.dirname, '../../..')
+  const plan = prepareRuntimePatches(project, repository)
+  const office = plan.patches.find(entry => entry.name === '@deepseek-ai/libreoffice-kit')!
+  const packageRoot = dirname(createRequire(resolve(repository, 'apps/desktop-host/package.json'))
+    .resolve('@deepseek-ai/libreoffice-kit/package.json'))
+  const published = join(root, 'office')
+  mkdirSync(join(published, 'lib'), { recursive: true })
+  for (const entry of ['index.js', 'cli.js']) {
+    writeFileSync(join(published, 'lib', entry), readFileSync(join(packageRoot, 'lib', entry)))
+  }
+  await promisify(execFile)('git', ['apply', join(project, office.path)], { cwd: published, timeout: 15_000, windowsHide: true })
+  for (const entry of ['index.js', 'cli.js']) {
+    const source = readFileSync(join(published, 'lib', entry), 'utf8')
+    // The published resolver is private; exercise its patched implementation with both filesystem absence values.
+    const resolver = source.match(/function installedPackageExists\(name\) \{[^}]+\}[^\n]+\n\}/u)?.[0]
+    expect(resolver, entry).toBeDefined()
+    for (const absent of [null, undefined]) {
+      const exists = runInNewContext(`(${resolver})`, {
+        require: { resolve: { paths: () => ['/fixture/node_modules'] } }, join,
+        lstatSync: (path: string) => path === join('/fixture/node_modules', 'present') ? {} : absent,
+      }) as (name: string) => boolean
+      expect(exists('missing'), `${entry}: ${String(absent)}`).toBe(false)
+      expect(exists('present'), entry).toBe(true)
+    }
+  }
 })
 
 it('does not infer version overrides from selected patches', () => {

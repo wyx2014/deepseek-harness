@@ -113,6 +113,8 @@ Desktop 携带独立的 Python、Node.js 和 pnpm 分发包。Python 包含 nump
 
 Desktop 展示精简的 `office` 路由及可具名调用的创作／操作子技能。创作使用内置 Python 库；操作技能调用配置的 Node 和 CLI 路径。技能位于 ASAR 外的 `runtime/office-skills`。渐进加载与限制见 [Office 技能包](../../packages/skill/skill-office/README.zh.md)。
 
+Linux 在缺少兼容原生引擎时使用内置的 LibreOffice WASM 引擎。Desktop 通过仅作用于运行时的 LibreOffice 补丁，将 Electron ASAR 内文件系统返回的 `null` 和 `undefined` 都视为路径不存在；已安装但不完整的原生引擎仍会使转换停止。
+
 该产物随 Desktop 版本发布。`runtime.json` 记录 Desktop 版本、目标平台、顶层解释器和包管理器版本及 Python 分发包版本表，以及所选目标的锁定产物输入与组装格式的摘要。分发包名称按 PEP 503 归一化；名称归一化后重复时，清单会被拒绝。旧 `components` 清单通过归一化继续可读，并保留其原有库版本一致性校验。匹配的安装会被复用；依赖或压缩包变化后，即使 Desktop 版本不变，也会在完整暂存副本完成后替换目录。不含摘要的旧清单会在下次安装时被替换。用户自行添加的 Python 包仅在产物身份一致时保留。目录替换失败时保留之前的安装；解释器仍在运行时，Windows 可能拒绝替换。
 
 Desktop 私有的 `runtime/bin` 目录仅添加到包安装进程，不进入 PTC 和 agent shell 从 Host 继承的 PATH。该工具不修改 PATH、环境变量或用户包管理器配置。pnpm 的全局包、命令入口和 store 保留自身默认值及用户设置，包括环境不支持全局安装时的原生错误。不提供独立依赖更新器。[第一方 Runtime 决策](../../.agents/notes/implemented/feature/2026-09-14-desktop-primary-runtime.zh.md)记录这些选择。
