@@ -140,6 +140,7 @@ These limits define when this backend is a poor fit or needs special operational
 - **`single` rewrites the whole unit** — each write republishes the complete unit file; use `per-record` or route the domain to SQLite when this cost is too high.
 - **No cross-process write locking** — two processes writing the same unit can interleave replacements; writes to the same file use last-completion wins.
 - **Windows rename without explicit write-through** — durability relies on libuv's `rename()` (`MoveFileExW` with replacement); the stricter Win32 write-through publish helper from the session-log backend is planned to move down here when the `log` facet lands.
+- **Windows refusal falls back to overwriting** — a rename that security software keeps refusing becomes an in-place overwrite through `replaceFileFromTemp`, which is not crash-atomic.
 
 <a id="dev-note"></a>
 ### Dev Note

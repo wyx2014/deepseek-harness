@@ -179,7 +179,7 @@ describe('writeFileAtomic', () => {
     expect((await readdir(dir)).filter(entry => entry.includes('.tmp'))).toEqual([])
   })
 
-  it('leaves no temp sibling after bounded Windows rename retries expire', async () => {
+  it('overwrites the target in place when Windows keeps refusing the replacement', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     vi.useFakeTimers()
     const dir = await scratch()
@@ -190,11 +190,90 @@ describe('writeFileAtomic', () => {
     const replacement = writeFileAtomic(target, 'new', { mode: 0o600 })
     await vi.waitFor(() => { expect(state.renameAttempts).toBeGreaterThan(0) })
     await vi.runAllTimersAsync()
-    await expect(replacement).rejects.toMatchObject({ code: 'EPERM' })
+    await replacement
 
     expect(state.renameAttempts).toBe(9)
-    expect(await readFile(target, 'utf8')).toBe('old')
+    expect(await readFile(target, 'utf8')).toBe('new')
     expect((await readdir(dir)).filter(entry => entry.includes('.tmp'))).toEqual([])
+  })
+
+  it('creates a target that Windows refuses to rename into place', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    vi.useFakeTimers()
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    state.renameFailures.push(...Array.from({ length: 9 }, () => 'EPERM'))
+
+    const replacement = writeFileAtomic(target, 'new', { mode: 0o600 })
+    await vi.waitFor(() => { expect(state.renameAttempts).toBeGreaterThan(0) })
+    await vi.runAllTimersAsync()
+    await replacement
+
+    expect(await readFile(target, 'utf8')).toBe('new')
+  })
+
+  it('skips the retry wait in a directory that already refused replacement, and recovers when renames work again', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    vi.useFakeTimers()
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    await writeFile(target, 'old')
+    state.renameFailures.push(...Array.from({ length: 10 }, () => 'EPERM'))
+    const first = writeFileAtomic(target, 'first', { mode: 0o600 })
+    await vi.waitFor(() => { expect(state.renameAttempts).toBeGreaterThan(0) })
+    await vi.runAllTimersAsync()
+    await first
+    state.renameAttempts = 0
+
+    await writeFileAtomic(target, 'second', { mode: 0o600 })
+    expect(state.renameAttempts).toBe(1)
+    expect(await readFile(target, 'utf8')).toBe('second')
+
+    await writeFileAtomic(target, 'third', { mode: 0o600 })
+    state.renameFailures.push('EPERM')
+    const retried = writeFileAtomic(target, 'fourth', { mode: 0o600 })
+    await vi.waitFor(() => { expect(state.renameAttempts).toBeGreaterThan(2) })
+    await vi.runAllTimersAsync()
+    await retried
+    expect(state.renameAttempts).toBe(4)
+    expect(await readFile(target, 'utf8')).toBe('fourth')
+  })
+
+  it('keeps the refusal and the old content when the target cannot be overwritten either', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    vi.useFakeTimers()
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    await mkdir(target)
+    state.renameFailures.push(...Array.from({ length: 9 }, () => 'EPERM'))
+
+    const replacement = writeFileAtomic(target, 'new', { mode: 0o600 })
+    const refused = expect(replacement).rejects.toMatchObject({ code: 'EPERM' })
+    await vi.waitFor(() => { expect(state.renameAttempts).toBeGreaterThan(0) })
+    await vi.runAllTimersAsync()
+    await refused
+
+    expect((await stat(target)).isDirectory()).toBe(true)
+    expect((await readdir(dir)).filter(entry => entry.includes('.tmp'))).toEqual([])
+  })
+
+  it.skipIf(process.platform === 'win32')('never writes through a symlink when Windows refuses the replacement', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    vi.useFakeTimers()
+    const dir = await scratch()
+    const victim = join(dir, 'victim')
+    const target = join(dir, 'document')
+    await writeFile(victim, 'victim-content')
+    await symlink(victim, target)
+    state.renameFailures.push(...Array.from({ length: 9 }, () => 'EPERM'))
+
+    const replacement = writeFileAtomic(target, 'new', { mode: 0o600 })
+    const refused = expect(replacement).rejects.toMatchObject({ code: 'EPERM' })
+    await vi.waitFor(() => { expect(state.renameAttempts).toBeGreaterThan(0) })
+    await vi.runAllTimersAsync()
+    await refused
+
+    expect(await readFile(victim, 'utf8')).toBe('victim-content')
   })
 
   it('does not retry a Windows rename failure without a transient code', async () => {

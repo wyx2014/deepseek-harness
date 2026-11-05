@@ -122,6 +122,7 @@ Nothing here enters a request prefix, so provider cache reuse is unaffected.
 These limits define where the package is not the right tool. They are current package constraints, not a task backlog.
 
 - **Atomic, not durable** — no `fsync` of the file or its directory, so after a crash the rename may be observed unwound. The file-backed stores here re-read and republish on boot, keeping durability the caller's policy.
+- **Windows refusal falls back to overwriting** — when security software keeps refusing the rename after the retries, the target is overwritten in place, so a crash during that write can leave it incomplete. Symlinks and directories are never written through; the refusal is rethrown instead.
 - **Callers supply complete content** — strings and `Uint8Array` (including `Buffer`) are accepted; streaming writes are unsupported.
 - **Some orphaned locks require operator recovery** — a lock whose record is empty or incomplete, or names a PID a live process reused, stays in place; later writers time out without deleting it. A contender that ends between creating a claim and removing the lock leaves both `<filename>.lock` and `<filename>.lock.takeover-<record hash>`, and the operator removes both.
 - **One host and one PID namespace** — the probe runs on the contender's host. Writers on several hosts sharing a network filesystem, or containers sharing a volume, can see a live holder as exited, take over its lock, and write at the same time as it.

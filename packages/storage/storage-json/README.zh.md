@@ -140,6 +140,7 @@ kind: "package-reference"
 - **`single` 会重写整个单元**——每次写入都重新发布完整单元文件；当此成本过高时，使用 `per-record` 或把领域路由到 SQLite。
 - **没有跨进程写锁**——两个进程写入同一单元时可能交错执行替换；对同一文件的写入以最后完成者为准。
 - **Windows rename 没有显式 write-through**——持久性依赖 libuv 的 `rename()`（`MoveFileExW` 并启用替换）；`log` 分面落地时，计划把会话日志后端更严格的 Win32 write-through 发布辅助函数下移到此处。
+- **Windows 拒绝时回退为覆盖写入**——安全软件持续拒绝的 rename 会通过 `replaceFileFromTemp` 转为原地覆盖，这种写入不具备崩溃原子性。
 
 <a id="dev-note"></a>
 ### 开发备注

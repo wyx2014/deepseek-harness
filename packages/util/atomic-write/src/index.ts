@@ -27,16 +27,56 @@ function isTransientWindowsRenameError(error: unknown): boolean {
   return WINDOWS_TRANSIENT_RENAME_ERRORS.has((error as NodeJS.ErrnoException | null)?.code ?? '')
 }
 
-/** Replace the target after bounded retries for transient Windows interference. */
-async function renameAtomicTemp(temp: string, filename: string): Promise<void> {
+/**
+ * Directories whose replacement stayed refused for a whole retry window. Security software that blocks replacement
+ * does so for every save, so later saves there skip the wait and overwrite at once.
+ */
+const refusedReplacementDirectories = new Set<string>()
+
+/** Overwrite the target as a plain write, or rethrow the refusal when it is not a file this write can stand in for. */
+async function overwriteRefusedTarget(filename: string, content: string | Uint8Array, mode: number, refusal: unknown): Promise<void> {
+  try {
+    const target = await lstat(filename).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return undefined
+      throw error
+    })
+    // A rename replaces a link itself; writing would go through it, so only a regular or absent target qualifies.
+    if (target !== undefined && !target.isFile()) throw refusal
+    await writeFile(filename, content, { mode })
+  } catch {
+    throw refusal
+  }
+}
+
+/**
+ * Publish a complete same-directory temp file over the target. Windows interference is retried for a bounded
+ * interval. Intranet security software can refuse every replacement while still allowing a plain write into the
+ * file, so a refusal that outlasts the retries overwrites the target instead: that write is not crash-atomic, which
+ * is the accepted cost of the save working at all on those machines. The temp file is gone on success; on failure
+ * it remains for the caller to remove.
+ * @param temp - complete temp file beside the target.
+ * @param filename - final path receiving the content.
+ * @param content - the temp file's content, for the overwrite.
+ * @param mode - permission bits should the overwrite have to create the target.
+ */
+export async function replaceFileFromTemp(temp: string, filename: string, content: string | Uint8Array, mode: number): Promise<void> {
+  const directory = dirname(filename)
+  const retryLimit = refusedReplacementDirectories.has(directory) ? 0 : WINDOWS_RENAME_RETRY_LIMIT
   let delay = WINDOWS_RENAME_RETRY_INITIAL_MS
   for (let retries = 0;; retries += 1) {
     try {
       await rename(temp, filename)
+      refusedReplacementDirectories.delete(directory)
       return
     } catch (error) {
       if (!isTransientWindowsRenameError(error)) throw error
-      if (retries >= WINDOWS_RENAME_RETRY_LIMIT) throw error
+      if (retries >= retryLimit) {
+        await overwriteRefusedTarget(filename, content, mode, error)
+        refusedReplacementDirectories.add(directory)
+        // The save succeeded; a temp file the same software will not release must not fail it.
+        await rm(temp, { force: true }).catch(() => undefined)
+        return
+      }
     }
     await new Promise(resolve => setTimeout(resolve, delay))
     delay = Math.min(delay * 2, WINDOWS_RENAME_RETRY_MAX_MS)
@@ -71,7 +111,8 @@ export interface WriteFileAtomicOptions {
  * through to its referent, and the same-directory sibling keeps the rename on
  * one filesystem. Windows replacement retries transient `EACCES`, `EBUSY`,
  * and `EPERM` failures for a bounded interval while the complete temp file
- * remains the rename source. On any remaining failure the temp file is
+ * remains the rename source, then overwrites the target in place (see
+ * {@link replaceFileFromTemp}). On any remaining failure the temp file is
  * removed and the failure rethrown. Crash durability (fsync) is out of scope.
  * @param filename - final path receiving the content.
  * @param content - complete next file content.
@@ -87,7 +128,7 @@ export async function writeFileAtomic(filename: string, content: string | Uint8A
   const temp = `${filename}.${randomBytes(6).toString('hex')}.tmp`
   try {
     await writeFile(temp, content, { mode: options.mode, flag: 'wx' })
-    await renameAtomicTemp(temp, filename)
+    await replaceFileFromTemp(temp, filename, content, options.mode)
   } catch (error) {
     await rm(temp, { force: true })
     throw error
