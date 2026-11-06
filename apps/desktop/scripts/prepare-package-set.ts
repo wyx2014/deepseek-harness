@@ -178,7 +178,7 @@ function main(): void {
     buildPaths.packedDsh,
     buildPaths.packedVendor,
     buildPaths.packedLandlock,
-    ...(product === undefined ? [] : [product.packages]),
+    ...(product === undefined || product.bundles.length === 0 ? [] : [product.packages]),
   ]
   const { values } = parseArgs({
     options: { from: { type: 'string', multiple: true }, out: { type: 'string' } },

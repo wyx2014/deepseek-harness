@@ -101,6 +101,9 @@ describe('desktop package-set selection', () => {
     ])
     expect(selectDesktopPackageClosure(available, ['@example/product']).map(pkg => pkg.manifest.name)).toContain('@deepseek-ai/dsh-base')
     expect(selectDesktopPackageClosure(available, ['@example/product']).map(pkg => pkg.manifest.name)).toContain('@example/product')
+    expect(selectDesktopPackageClosure(available, []).map(pkg => pkg.manifest.name)).toEqual([
+      '@deepseek-ai/dsh', '@deepseek-ai/dsh-desktop-host',
+    ])
     expect(() => selectDesktopPackageClosure(available, ['@example/missing'])).toThrow(/omit @example\/missing/u)
     available.delete('@deepseek-ai/dsh-base')
     expect(() => selectDesktopPackageClosure(available, ['@example/product'])).toThrow(/unpacked package/u)

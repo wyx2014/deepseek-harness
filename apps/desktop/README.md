@@ -38,6 +38,8 @@ Desktop binds `127.0.0.1`, the address Electron dials for the ready URL and the 
 
 Installed products enable newly shipped bundle defaults when an existing Desktop profile starts. The profile records previously offered defaults in its `package.json`; later starts retain individually disabled bundles, external plugins, settings, and sessions. Profiles without this record receive the installed product defaults once. Recovery disables all third-party bundles and automatic default enrollment. Invalid enrollment metadata stops profile preparation without replacing the file.
 
+A product configuration with an empty `bundles` list uses the shared Harness profile without reading the product package directory. It adds no product bundles to the installed runtime.
+
 The first application-menu command, **About TP Cowork**, opens Electron's native About panel with the application icon, product name, and installed release version. The menu follows the Desktop shell locale. On macOS, Hide, Hide Others, Show All, and Quit use localized labels; Hide and Quit include the TP Cowork product name. These commands retain their native actions and shortcuts. macOS reads the icon from its application bundle, so an unpackaged development launch displays Electron's icon; Windows receives the packaged PNG.
 
 The product notification API shows native task notifications while all application windows are unfocused and suppresses repeated keys for three seconds. Clicking a notification focuses the primary window and returns its target to the requesting renderer. Windows packages use the installer's application identity for notification delivery.
