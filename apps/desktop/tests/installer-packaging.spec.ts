@@ -100,7 +100,7 @@ describe('installer preparation preserves application dependencies', () => {
       vi.spyOn(packager, 'getWorkspaceRoot').mockResolvedValue(tmpdir())
       await packager.installAppDependencies(process.platform === 'win32' ? Platform.LINUX : Platform.WINDOWS, Arch.x64)
       expect(packager.areNodeModulesHandledExternally).toBe(false)
-      expect(execute).toHaveBeenCalledTimes(platform === 'win32' ? 1 : 0)
+      expect(execute).not.toHaveBeenCalled()
     } finally {
       vi.unstubAllEnvs()
       vi.restoreAllMocks()

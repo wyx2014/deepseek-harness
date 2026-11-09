@@ -7,7 +7,6 @@
   "type": "module",
   "main": "lib/main.js",
   "scripts": {
-    "test:installer": "node scripts/test-windows-installer.mjs",
     "build": "tsc -b && pnpm run bundle",
     "bundle": "tsdown --config-loader native",
     "dev": "tsx scripts/dev.ts",

@@ -857,7 +857,7 @@ describe('desktop main startup', () => {
     expect(() => notify({ sender, senderFrame: sender.mainFrame }, { id: 'a', key: 'a', title: '', body: 'a' })).toThrow('invalid task notification')
   })
 
-  it.each(['darwin', 'win32', 'linux'] as const)('limits native titlebar styling to macOS on %s', async (platform) => {
+  it.each(['darwin', 'win32', 'linux'] as const)('uses macOS insets or the in-app caption on %s', async (platform) => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
     await import('../src/main.ts')
     await harness.preparing.promise
@@ -865,7 +865,8 @@ describe('desktop main startup', () => {
     expect(window.urls).toEqual(['dsh-app://app/'])
     if (platform === 'darwin') {
       expect(window.options).toMatchObject({ titleBarStyle: 'hiddenInset', vibrancy: 'sidebar', backgroundColor: '#00000000' })
-    } else if (platform === 'win32') {
+    } else {
+      // Windows and Linux share the in-app caption: native caption buttons through the overlay, no native menubar.
       expect(window.options).toMatchObject({ titleBarStyle: 'hidden', titleBarOverlay: { height: WINDOWS_TITLEBAR_HEIGHT } })
       expect(window.options).not.toHaveProperty('vibrancy')
       expect(harness.menu.mock.calls[0]![0]).toEqual([
@@ -873,10 +874,7 @@ describe('desktop main startup', () => {
         { role: 'toggleDevTools', visible: false, accelerator: 'F12' },
       ])
       // Windows shows notifications only for the AppUserModelID on the installer's shortcuts.
-      expect(harness.app.setAppUserModelId).toHaveBeenCalledWith('com.deepseek.dsh')
-    } else {
-      expect(window.options).not.toHaveProperty('titleBarStyle')
-      expect(window.options).not.toHaveProperty('vibrancy')
+      if (platform === 'win32') expect(harness.app.setAppUserModelId).toHaveBeenCalledWith('com.deepseek.dsh')
     }
     expect(harness.hosts).toHaveLength(0)
   })
@@ -893,7 +891,7 @@ describe('desktop main startup', () => {
     expect((await handler(new Request('dsh-app://foreign/index.html'))).status).toBe(404)
   })
 
-  it.each(['darwin', 'win32'] as const)('relays the %s fullscreen state on transitions and after each load', async (platform) => {
+  it.each(['darwin', 'win32', 'linux'] as const)('relays the %s fullscreen state on transitions and after each load', async (platform) => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
     await import('../src/main.ts')
     await harness.preparing.promise
@@ -914,16 +912,6 @@ describe('desktop main startup', () => {
     window.destroyed = true
     window.emit('enter-full-screen')
     expect(sent()).toHaveLength(relayed)
-  })
-
-  it.each(['linux'] as const)('registers no fullscreen relay on %s', async (platform) => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
-    await import('../src/main.ts')
-    await harness.preparing.promise
-    const window = harness.windows[0]!
-    window.emit('enter-full-screen')
-    window.webContents.emit('did-finish-load')
-    expect(window.webContents.send.mock.calls.filter(([channel]) => channel === DESKTOP_IPC.windowFullscreen)).toHaveLength(0)
   })
 
   it('covers the macOS vibrancy reattach gap with an opaque base while minimized or hidden', async () => {
@@ -1033,7 +1021,7 @@ describe('desktop main startup', () => {
     await edit
   })
 
-  it.each(['darwin', 'linux'] as const)('adds the product File menu and standard window commands only on macOS (%s)', async (platform) => {
+  it.each(['darwin'] as const)('adds the product File menu and standard window commands only on macOS (%s)', async (platform) => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
     await import('../src/main.ts')
     await harness.preparing.promise

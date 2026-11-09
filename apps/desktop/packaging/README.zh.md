@@ -242,17 +242,7 @@ Desktop 在本地打包工作区包，并通过目标捆绑的 Node 和 pnpm 安
 
 打包应用运行编译后的 JavaScript 和预生成的 Typert 元数据，不编译 TypeScript 插件。源码级调试导航和编辑器声明仍可从开发包中获取。[复制规则测试](../tests/runtime-file-policy.spec.ts)覆盖排除项和保留资源；[产物 smoke](../tests/fixtures/runtime-payload-smoke.mjs) 在 Host smoke 和最终清单验证之前，使用 Electron RunAsNode 执行。产物 smoke 解析搜索工具使用的 ripgrep 可执行文件，并验证文本搜索和文件枚举。Windows 签名构建在依赖签名后运行这些检查；其他构建在 `prepare:dsh` 中运行。[Host smoke](../scripts/smoke-runtime.ts) 使用捆绑的 Python 创建 DOCX、XLSX 和 PPTX 输入，通过真实 Office 提供方逐一转换并检查 PDF 输出。每个组装后的应用（包括目录包和未签名构建）都会针对 ASAR 重复产物和 Host 检查。归档完整性检查将归档内完整描述符与准备结果比对，并核对归档和解包目录中的文件内容与清单、归档内文件记录的执行标志，以及解包文件的物理权限。转换失败会在写入发布记录前终止打包；macOS DMG/ZIP 构建在公证前执行这些检查。
 
-Windows 发布验收还需在 Desktop 构建后手动运行[目录和替换检查](../scripts/smoke-windows.ps1)。将 `$Makensis`、`$SevenZip` 和 `$PluginDir` 分别设为锁定版本构建器的 NSIS 编译器、7-Zip 可执行文件和 x86-unicode NSIS 插件目录；通过 `-FrameLibrary` 传入已准备好的 `window-frame.dll`，即可同时覆盖原生解压路径及其失败报告。从仓库根目录运行以下命令。它验证 目录替换与回滚和两种文件占用替换方式；不属于单元测试通道。
-
-```powershell
-pwsh -NoProfile -File apps/desktop/scripts/smoke-windows.ps1 -Makensis $Makensis -SevenZip $SevenZip -PluginDir $PluginDir -FrameLibrary apps/desktop/.desktop-build/targets/win-x64/installer-ui/window-frame.dll
-```
-
-新安装默认使用当前用户的程序目录。该目录与 Windows 不在同一驱动器时（例如用户配置文件位于 `D:`），默认目录改为 Windows 所在驱动器根目录下以产品命名的文件夹，例如 `C:\TP Cowork`：部分内网安全策略不允许系统盘以外启动的程序替换文件，而普通用户无法写入 Program Files。已登记的安装和显式 `/D=` 保留原目录。安装器不提供选择安装位置，只有 `/D=` 可以指定其他目录。同一台电脑的多个 Windows 用户需要使用不同目录，因为根目录文件夹归首个用户所有。Windows 安装器在启动时和开始安装时检查应用是否正在运行，通过检查后才将新版本解压到安装目录旁边。通过同卷目录改名替换前，安装器会再次检查。运行中的应用会阻止安装；更新启动允许等待应用退出，最长十秒。同路径升级在替换成功前保留旧目录；解压失败时旧版不变，替换失败时尝试恢复旧目录。安装器在启动前清理旧版备份。强制结束安装器或断电可能留下 `.new-*` 或 `.old-*` 目录；不同安装位置或安装范围迁移仍使用 electron-builder 的旧卸载器流程。
-
-目录改名、空目标目录删除和旧版恢复遇到 Windows 错误 5、32 或 33 时最多尝试十次，每次等待递增 250 毫秒（每个操作合计等待 11.25 秒）。提升新目录只尝试三次（合计等待 0.75 秒）：安全软件扫描暂存文件期间会占用这些文件，并在扫描结束前一直拒绝改名。三次尝试后，安装器使用 Windows `robocopy` 把暂存文件复制到已清空的安装目录；它能读取被扫描器占用的文件，并支持长路径。复制成功时安装正常完成、不弹窗，并把尝试记录保存为解压报告旁的 `directory-copy-fallback.log`。退出时会重试删除暂存目录。复制失败时，安装器删除不完整的副本、恢复旧目录，并报告最初的改名错误，复制结果列在尝试记录中。其他错误立即停止。替换失败时，安装器将 Windows 错误、相关路径和恢复结果写入解压报告旁的 `directory-failure-<时间戳>.log`。如果恢复失败，安装器会清理未被占用的暂存文件并保留备份。上报此失败后，退出清理不再重试恢复。请保留报告所列的备份目录，并在重新安装前联系支持人员。静默安装保存相同的诊断，不显示弹窗。
-
-解压失败时，安装器会把 7-Zip 的结果和完整错误输出写入更新缓存目录 `%LOCALAPPDATA%\<按包名派生>-updater\installer-logs\extract-failure-<时间戳>.log`（当前为 `@deepseek-aidsh-desktop-updater`），并在弹窗中显示首条错误行和 **复制错误信息** 按钮；静默安装只写入报告。未签名的 Windows 构建（`DSH_DESKTOP_UNSIGNED=1`）会将安装包命名为 `deepseek-harness-<版本>-win-x64-unsigned.exe`，以免被误当作发布产物。
+Windows 安装使用 electron-builder 原生的引导式安装程序，参见 [Windows 安装界面](../README.zh.md#windows-installer-interface)。未签名的 Windows 构建（`DSH_DESKTOP_UNSIGNED=1`）会将安装包命名为 `deepseek-harness-<版本>-win-x64-unsigned.exe`，以免被误当作发布产物。
 
 Windows 打包将 7-Zip 过滤器固定为 `BCJ`，以兼容内置的 NSIS 解码器。这样可以保留 x64 安装包中由依赖携带的 ARM64 二进制文件；自动 ARM64 过滤会生成该解码器无法解压的条目。
 

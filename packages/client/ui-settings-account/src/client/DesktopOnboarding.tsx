@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import { hasOnboardingCredit } from './onboarding-balance.ts'
 import { OnboardingSurface } from './OnboardingSurface.tsx'
+import { OnboardingLoading } from './OnboardingLoading.tsx'
 import type { DesktopOnboardingProps } from './onboarding-contract.ts'
 import { OnboardingWelcomeStep } from './OnboardingWelcomeStep.tsx'
 import { OnboardingCreditStep } from './OnboardingCreditStep.tsx'
@@ -76,7 +77,7 @@ export function DesktopOnboarding({
     track?.('onboarding_popup_click', { popup_name: dialog === 'skip' ? 'skip_setting' : 'skip_charge', button_name })
   }
   if (state.visible && state.status === 'loading') return <OnboardingSurface>
-    <div className={css.loading} role="status">{t('onboardingLoading')}</div>
+    <OnboardingLoading label={t('onboardingLoading')} />
   </OnboardingSurface>
   if (!state.visible || pageName === undefined) return null
   const click = (button_name: ProductEventMap['onboarding_page_click']['button_name']) => {

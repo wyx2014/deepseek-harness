@@ -163,7 +163,9 @@ it.each([false, true])('covers the workspace until initial onboarding eligibilit
   const view = mount(done, true)
   expect(appRoot.inert).toBe(true)
   expect(appRoot.style.opacity).toBe('0')
-  expect(screen.getByRole('status').textContent).toBe(zh.onboardingLoading)
+  // Loading continues the startup logo; the text is only the status's accessible name.
+  expect(screen.getByRole('status', { name: zh.onboardingLoading }).textContent).toBe('')
+  expect(screen.getByRole('status').querySelector('[data-onboarding-loading-logo]')?.getAttribute('src')).toBe('/startup-logo.png')
   view.resolve()
   expect(screen.queryByRole('status')).toBeNull()
   expect(appRoot.inert).toBe(!done)

@@ -4,8 +4,6 @@ import { existsSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import {
   resolveDesktopAppId,
   resolveMacOSNotarizationEnvironment,
@@ -17,14 +15,12 @@ import {
   createWindowsTokenSigner,
   installWindowsNsisBootstrapSigner,
   resolveWindowsUpdatePublisher,
-  scrubWindowsSigningEnvironment,
 } from './windows-sign.mjs'
 import { resolveDesktopAutoUpdateConfig } from './desktop-auto-update-environment.mjs'
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
 import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mjs'
 import { desktopArtifactOutput, desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
-import { installWindowsDirectoryInstaller } from './windows-directory-installer.mjs'
 import { preserveWindowsRuntimeSignature, signWindowsCode } from './windows-runtime-signature.mjs'
 import { prepareWindowsAsarUnpack, verifyWindowsAsarUnpack } from './windows-asar-unpack.mjs'
 import { recordPackagingEvent } from './packaging-run.mjs'
@@ -91,7 +87,6 @@ export function createElectronBuilderConfig(
     throw new Error('desktop package: Linux requires standalone unsigned product packaging')
   }
   const policy = standalone || (packagesMacOS && unsigned) ? undefined : resolveDesktopPolicyEnvironment(env)
-  if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
   const macOSSigning = packagesMacOS && !unsigned ? resolveMacOSSigningEnvironment(env) : undefined
   if (packagesMacOS && !unsigned && !skipNotarization) resolveMacOSNotarizationEnvironment(env)
   const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch))
@@ -154,19 +149,8 @@ export function createElectronBuilderConfig(
     asar: true,
     electronDist: buildPaths.electron,
     electronFuses: { runAsNode: true },
-    beforeBuild: async () => {
-      if (resolvedPlatform !== 'win32') return true
-      await promisify(execFile)('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-        fileURLToPath(new URL('./prepare-windows-installer.ps1', import.meta.url)),
-        '-OutputDirectory', join(buildPaths.root, 'installer-ui')], {
-        env: scrubWindowsSigningEnvironment(env), windowsHide: true,
-      })
-      if (windowsSigner !== undefined) {
-        await windowsSigner({ path: join(buildPaths.root, 'installer-ui', 'window-frame.dll'), hash: 'sha256', isNest: false })
-      }
-      // A falsy result tells electron-builder to omit its production node_modules collection.
-      return true
-    },
+    // A falsy result tells electron-builder to omit its production node_modules collection.
+    beforeBuild: async () => true,
     files: [
       'lib/main.js',
       'lib/welcome/**/*',
@@ -295,14 +279,13 @@ export function createElectronBuilderConfig(
     deb: { packageName: artifactPrefix },
     // Electron needs libgbm and ALSA, which the builder's default RPM requirements omit.
     rpm: { packageName: artifactPrefix, fpm: ['-d', 'mesa-libgbm', '-d', 'alsa-lib'] },
+    // The stock electron-builder assisted installer, as nanobot-gui ships it: the user chooses who to install for
+    // and where, the default is the per-user %LOCALAPPDATA%\Programs folder, and "all users" asks Windows for
+    // administrator rights. Intranet machines rejected every stricter custom path policy.
     nsis: {
-      installerSidebar: join(buildPaths.root, 'installer-ui', 'uninstaller-sidebar.bmp'),
-      uninstallerSidebar: join(buildPaths.root, 'installer-ui', 'uninstaller-sidebar.bmp'),
       include: fileURLToPath(new URL('./installer.nsh', import.meta.url)),
       oneClick: false,
-      perMachine: false,
-      allowElevation: false,
-      allowToChangeInstallationDirectory: false,
+      allowToChangeInstallationDirectory: true,
       installerLanguages: ['en_US', 'zh_CN'],
       differentialPackage: true,
     },

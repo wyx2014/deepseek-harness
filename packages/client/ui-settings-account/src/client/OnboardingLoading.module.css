@@ -1,0 +1,26 @@
+/* Same size, place and breathing as the startup cover and boot page logo (apps/web/index.html,
+   client-web boot-page.module.css), without repeating their entrance, so the handover is invisible. */
+.loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.logo {
+  width: 96px;
+  height: 96px;
+  filter: drop-shadow(0 20px 12px rgb(0 0 0 / 12%)) drop-shadow(0 8px 5px rgb(0 0 0 / 12%));
+  animation: breathe 1.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo { animation: none; }
+}

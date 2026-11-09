@@ -60,7 +60,9 @@ it('keeps welcome mandatory and enters credit only through Start', async () => {
 
 it('covers the application without showing an unfinished step while durable settings load', () => {
   mount('welcome', 'positive', 'loading')
-  expect(screen.getByRole('status').textContent).toBe(zh.onboardingLoading)
+  // Loading continues the startup logo; the text is only the status's accessible name.
+  expect(screen.getByRole('status', { name: zh.onboardingLoading }).textContent).toBe('')
+  expect(screen.getByRole('status').querySelector('[data-onboarding-loading-logo]')?.getAttribute('src')).toBe('/startup-logo.png')
   expect(screen.queryByRole('button', { name: zh.onboardingStart })).toBeNull()
   expect(document.querySelector('[data-desktop-onboarding]')).toBeNull()
 })
