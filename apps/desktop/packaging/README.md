@@ -93,7 +93,9 @@ pnpm run package:desktop:mac:x64
 pnpm run package:desktop:win:x64
 ```
 
-The macOS arm64 command requires Apple Silicon. The macOS x64 command runs on Intel macOS or Apple Silicon with Rosetta. The Windows x64 command requires Windows x64. Linux is not a supported Desktop release target.
+The macOS arm64 command requires Apple Silicon. The macOS x64 command runs on Intel macOS or Apple Silicon with Rosetta. The Windows x64 command requires Windows x64. Linux is available only for standalone unsigned product tests, not signed Desktop releases.
+
+Linux product branding can supply `resources/linux-icons/<size>x<size>.png` renditions for hicolor menu icons; an unbranded checkout uses `icon-macos.png`. `DSH_DESKTOP_DISPLAY_NAME` controls the menu label and package synopsis, while `DSH_DESKTOP_PRODUCT_NAME` retains the data-directory name and window class. DEB installation offers a desktop shortcut to existing users under `/home`, runs shortcut operations as each user, preserves a user-deleted shortcut across upgrades, and removes installer-created shortcuts on uninstall. AppImage does not install these shortcuts.
 
 Both release and local unsigned macOS DMGs use LZMA compression (`dmg.format: 'ULMO'`) in [the electron-builder configuration](../scripts/electron-builder-config.mjs). A [build-time patch](../../../patches/app-builder-lib@26.17.0.patch) adds this format to the pinned builder's validation and TypeScript declarations.
 

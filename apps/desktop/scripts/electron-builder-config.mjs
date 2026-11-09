@@ -30,6 +30,9 @@ import {
   writeMacOSAppUpdateConfig,
 } from './macos-app-update-config.mjs'
 
+/** Product branding writes the Linux icon set here (16x16.png … 512x512.png). */
+const linuxIcons = fileURLToPath(new URL('../resources/linux-icons', import.meta.url))
+
 /**
  * Create electron-builder configuration from one release environment.
  * @param {NodeJS.ProcessEnv} env - Packaging environment.
@@ -126,6 +129,10 @@ export function createElectronBuilderConfig(
   const packaged = resolveDesktopBuildCommit(env)
   const productName = env.DSH_DESKTOP_PRODUCT_NAME ?? 'TP Cowork'
   const artifactPrefix = env.DSH_DESKTOP_ARTIFACT_PREFIX ?? 'deepseek-harness'
+  // The name people see in the Linux application menu; the product name also names the data folder, so a variant
+  // can show a shorter name without moving its users' data.
+  const displayName = env.DSH_DESKTOP_DISPLAY_NAME ?? productName
+  if (!displayName.trim() || /[\x00-\x1f]/u.test(displayName)) throw new Error('desktop package: invalid display name')
   if (!productName.trim() || /[\x00-\x1f<>:"/\\|?*]/u.test(productName) || !/^[a-z0-9][a-z0-9-]*$/u.test(artifactPrefix)) {
     throw new Error('desktop package: invalid product name or artifact prefix')
   }
@@ -269,14 +276,20 @@ export function createElectronBuilderConfig(
     linux: {
       category: 'Development',
       target: ['AppImage', 'deb', 'rpm'],
-      icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
+      // A directory of NxN.png renditions installs one hicolor icon per standard size; a lone 1024px PNG lands in a
+      // size Kylin's icon theme never looks up, leaving the menu entry without an icon.
+      icon: existsSync(linuxIcons) ? linuxIcons : fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
       // A stable lowercase name keeps Exec, Icon and the hicolor icon file aligned; a scoped package name does not.
       executableName: artifactPrefix,
-      synopsis: productName,
+      synopsis: displayName,
       maintainer: env.DSH_DESKTOP_LINUX_MAINTAINER ?? productName,
-      desktop: { entry: { Name: productName, StartupWMClass: productName } },
+      // Electron reports the product name as the window class, so StartupWMClass keeps it to group windows correctly.
+      desktop: { entry: { Name: displayName, StartupWMClass: productName } },
     },
-    deb: { packageName: artifactPrefix },
+    // The stock scripts plus a desktop shortcut for each user, which Kylin users expect after installing a package.
+    deb: { packageName: artifactPrefix,
+      afterInstall: fileURLToPath(new URL('./linux-after-install.sh', import.meta.url)),
+      afterRemove: fileURLToPath(new URL('./linux-after-remove.sh', import.meta.url)) },
     // Electron needs libgbm and ALSA, which the builder's default RPM requirements omit.
     rpm: { packageName: artifactPrefix, fpm: ['-d', 'mesa-libgbm', '-d', 'alsa-lib'] },
     // The stock electron-builder assisted installer, as nanobot-gui ships it: the user chooses who to install for

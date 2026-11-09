@@ -51,10 +51,35 @@ describe('installer preparation preserves application dependencies', () => {
     expect(config.extraMetadata.homepage).toBe('https://example.com/cowork')
     expect(config.linux).toMatchObject({ target: ['AppImage', 'deb', 'rpm'], executableName: 'example-cowork',
       maintainer: 'Example Cowork', desktop: { entry: { Name: 'Example Cowork' } } })
-    expect(readFileSync(config.linux.icon)).toEqual(readFileSync(new URL('../resources/icon-macos.png', import.meta.url)))
-    expect(config.deb).toEqual({ packageName: 'example-cowork' })
+    // Product branding supplies a per-size icon directory; an unbranded checkout falls back to the single PNG.
+    if (existsSync(new URL('../resources/linux-icons', import.meta.url))) expect(config.linux.icon).toMatch(/linux-icons$/u)
+    else expect(readFileSync(config.linux.icon)).toEqual(readFileSync(new URL('../resources/icon-macos.png', import.meta.url)))
+    expect(config.deb).toMatchObject({ packageName: 'example-cowork' })
+    expect(config.deb.afterInstall).toMatch(/linux-after-install\.sh$/u)
+    expect(config.deb.afterRemove).toMatch(/linux-after-remove\.sh$/u)
     expect(config.rpm).toEqual({ packageName: 'example-cowork', fpm: ['-d', 'mesa-libgbm', '-d', 'alsa-lib'] })
   }, 30_000)
+  it('shows a Linux display name in the menu while the product name keeps the data folder and window class', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const env = { DSH_DESKTOP_APP_ID: 'com.example.product', DSH_DESKTOP_UNSIGNED: '1', DSH_DESKTOP_STANDALONE: '1',
+      DSH_DESKTOP_PRODUCT_CONFIG: '/product/desktop-product.json', DSH_DESKTOP_PRODUCT_NAME: 'Example Cowork Linux',
+      DSH_DESKTOP_ARTIFACT_PREFIX: 'example-cowork-linux', DSH_DESKTOP_DISPLAY_NAME: 'Example Cowork' }
+    const config = createElectronBuilderConfig(env, 'linux', 'x64')
+    expect(config.productName).toBe('Example Cowork Linux')
+    expect(config.linux.desktop.entry).toEqual({ Name: 'Example Cowork', StartupWMClass: 'Example Cowork Linux' })
+    expect(() => createElectronBuilderConfig({ ...env, DSH_DESKTOP_DISPLAY_NAME: ' ' }, 'linux', 'x64')).toThrow(/display name/u)
+  })
+  it.each(['linux-after-install.sh', 'linux-after-remove.sh'])('%s uses only macros electron-builder defines and parses as bash', async (name) => {
+    const { execFileSync } = await vi.importActual<typeof import('node:child_process')>('node:child_process')
+    const template = readFileSync(new URL(`../scripts/${name}`, import.meta.url), 'utf8')
+    // electron-builder throws on an unknown ${name} macro; these are the ones its DEB scripts receive.
+    const macros = [...template.matchAll(/\$\{([a-zA-Z]+)\}/gu)].map(match => match[1])
+    expect(new Set(macros)).toEqual(new Set(['executable', 'sanitizedProductName']))
+    const script = template.replaceAll('${executable}', 'example-cowork').replaceAll('${sanitizedProductName}', 'Example Cowork')
+    expect(() => execFileSync('bash', ['-n'], { input: script })).not.toThrow()
+    if (name === 'linux-after-remove.sh') expect(script).toMatch(/"\$1" = remove/u)
+    else expect(script).toContain('runuser -u "$user" -- install -m 755 "$DESKTOP_ENTRY" "$desktop/example-cowork.desktop"')
+  })
   it.each(['win32', 'darwin'] as const)('rejects a missing production policy before signing on %s', async (platform) => {
     const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
     expect(() => createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.installer',

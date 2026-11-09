@@ -93,7 +93,9 @@ pnpm run package:desktop:mac:x64
 pnpm run package:desktop:win:x64
 ```
 
-macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 不是受支持的 Desktop 发布目标。
+macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 仅用于独立未签名产品测试，不支持签名 Desktop 发布。
+
+Linux 产品品牌资源可提供 `resources/linux-icons/<size>x<size>.png` 各尺寸图像，作为 hicolor 菜单图标；未设置品牌资源时使用 `icon-macos.png`。`DSH_DESKTOP_DISPLAY_NAME` 控制菜单名称和包简介，`DSH_DESKTOP_PRODUCT_NAME` 保留数据目录名和窗口类名。DEB 安装时为 `/home` 下已有用户提供桌面快捷方式，以对应用户身份操作文件；用户删除的快捷方式在升级时不会恢复，卸载时移除安装器创建的快捷方式。AppImage 不安装这些快捷方式。
 
 macOS 正式发布和本地未签名 DMG 都通过 [electron-builder 配置](../scripts/electron-builder-config.mjs)中的 `dmg.format: 'ULMO'` 使用 LZMA 压缩。[构建时补丁](../../../patches/app-builder-lib@26.17.0.patch)为固定版本 builder 的校验规则和 TypeScript 声明添加此格式。
 

@@ -61,7 +61,11 @@ export interface DesktopElectronBuilderConfig {
     readonly maintainer: string
     readonly desktop: { readonly entry: { readonly Name: string; readonly StartupWMClass: string } }
   }
-  readonly deb: { readonly packageName: string }
+  readonly deb: {
+    readonly packageName: string
+    readonly afterInstall: string
+    readonly afterRemove: string
+  }
   readonly rpm: { readonly packageName: string; readonly fpm: readonly string[] }
   readonly nsis: {
     readonly include: string
