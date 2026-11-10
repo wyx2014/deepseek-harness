@@ -64,6 +64,7 @@ import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray, LINUX_TRAY_ICON_SIZE } from './tray.ts'
+import { inspectInstallation, type InstallationInspection } from './installation-files.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
 import { DesktopTaskNotifications, packagedAppId, parseDesktopTaskNotification } from './task-notifications.ts'
 
@@ -109,15 +110,21 @@ const recovery = new DesktopFatalRecovery({
   exit: () => { quitWithoutConfirmation() },
   restart: () => { app.relaunch(); quitWithoutConfirmation() },
   writeReport: (error, source) => persistCrashReport(error, source),
+  installation: () => inspectedInstallation,
 })
 
-function persistCrashReport(error: unknown, source: CrashReportSource): Promise<string | undefined> {
+/** The installed-files comparison of the latest crash report; only packaged applications carry a list to compare with. */
+let inspectedInstallation: InstallationInspection | undefined
+
+async function persistCrashReport(error: unknown, source: CrashReportSource): Promise<string | undefined> {
+  inspectedInstallation = app.isPackaged ? await inspectInstallation(process.resourcesPath) : undefined
   return writeCrashReport(app.getPath('logs'), {
     source,
     phase: backendReady ? 'running' : 'startup',
     error,
     ...(error instanceof DesktopHostFatalError && error.diagnostic !== undefined ? { hostDiagnostic: error.diagnostic } : {}),
     rendererConsole: rendererConsole.snapshot(),
+    ...(inspectedInstallation === undefined ? {} : { installation: inspectedInstallation }),
     app: {
       name: app.name, version: app.getVersion(), platform: process.platform, arch: process.arch,
       electron: process.versions.electron, node: process.versions.node, locale: currentDesktopLocale().id,

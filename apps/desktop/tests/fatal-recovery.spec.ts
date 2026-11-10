@@ -2,11 +2,13 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { MessageBoxOptions } from 'electron'
 import { CRASH_REPORT_WAIT_MS, DesktopFatalRecovery } from '../src/fatal-recovery.ts'
 import type { CrashReportSource } from '../src/crash-report.ts'
+import type { InstallationInspection } from '../src/installation-files.ts'
 import { resolveDesktopLocale } from '../src/locale.ts'
 
 function fixture(
   locale = 'en',
   writeReport: (error: unknown, source: CrashReportSource) => Promise<string | undefined> = async () => undefined,
+  installation?: InstallationInspection,
 ) {
   const choice = Promise.withResolvers<{ response: number; checkboxChecked: boolean }>()
   const stopped = Promise.withResolvers<undefined>()
@@ -18,6 +20,7 @@ function fixture(
     exit: vi.fn(),
     restart: vi.fn(),
     writeReport: vi.fn(writeReport),
+    installation: () => installation,
   }
   return { operations, choice, stopped, recovery: new DesktopFatalRecovery(operations) }
 }
@@ -238,4 +241,40 @@ it('writes the report once for the first fatal failure and not for the recovery-
   expect(operations.show).toHaveBeenCalledTimes(2)
   expect(operations.writeReport).toHaveBeenCalledOnce()
   expect(operations.show.mock.calls[1]![0].detail).toContain(REPORT_PATH)
+})
+
+it.each([
+  ['en', 'The installation is incomplete: 7 of 13508 program files are missing.', 'allow list'],
+  ['zh-CN', '安装不完整：13508 个程序文件中有 7 个缺失。', '信任名单'],
+])('says the installation is incomplete and names the first missing files in %s', async (locale, summary, advice) => {
+  const missing = Array.from({ length: 7 }, (_, index) => `app.asar.unpacked/dsh/node_modules/koffi/file-${String(index)}.js`)
+  const { operations, choice, stopped, recovery } = fixture(locale, async () => REPORT_PATH, { total: 13508, missing, changed: [] })
+  const pending = recovery.report(new Error("ENOENT: no such file or directory, open 'koffi\\package.json'"), 'host')
+  await shown(operations)
+  const options = operations.show.mock.calls[0]![0]
+  expect(options.message).toBe(summary)
+  expect(options.detail).toContain(missing.slice(0, 5).join('\n'))
+  expect(options.detail).not.toContain(missing[5])
+  expect(options.detail).toContain(REPORT_PATH)
+  expect(options.detail).toContain(advice)
+  expect(options.detail).not.toContain('ENOENT')
+  // Disabling plugins cannot restore program files.
+  expect(options.buttons).toHaveLength(2)
+  choice.resolve({ response: 0, checkboxChecked: false })
+  stopped.resolve(undefined)
+  await pending
+  expect(operations.exit).toHaveBeenCalledOnce()
+})
+
+it('keeps the ordinary failure dialog when every program file is present', async () => {
+  const { operations, choice, stopped, recovery } = fixture('en', async () => undefined, { total: 3, missing: [], changed: ['runtime/a.pyc'] })
+  const pending = recovery.report(new Error('plugin failed'), 'host')
+  await shown(operations)
+  const options = operations.show.mock.calls[0]![0]
+  expect(options.message).toBe(resolveDesktopLocale('en').messages.fatalSummary)
+  expect(options.detail).toContain('plugin failed')
+  expect(options.buttons).toHaveLength(3)
+  choice.resolve({ response: 0, checkboxChecked: false })
+  stopped.resolve(undefined)
+  await pending
 })

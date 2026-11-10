@@ -2,6 +2,7 @@
 
 import type { MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import type { CrashReportSource } from './crash-report.ts'
+import type { InstallationInspection } from './installation-files.ts'
 import { formatDesktopMessage, type DesktopMessages } from './locale.ts'
 import { desktopErrorState } from './startup-error.ts'
 
@@ -14,10 +15,24 @@ interface RecoveryOperations {
   restart(): void
   /** Persist the complete diagnostic; resolves with the file path, or `undefined` when nothing was written. */
   writeReport(error: unknown, source: CrashReportSource): Promise<string | undefined>
+  /** The installed-files comparison made for the report just written, when the package recorded a list. */
+  installation?(): InstallationInspection | undefined
 }
 
-/** Upper bound on waiting for the crash report before the dialog opens. */
-export const CRASH_REPORT_WAIT_MS = 1_000
+/** Missing files named in the dialog; the report lists more. */
+const MISSING_FILES_SHOWN = 5
+
+/** Dialog detail for an installation with missing files: the first few, the report, then what to do about it. */
+function incompleteDetail(installation: InstallationInspection, messages: DesktopMessages, reportPath: string | undefined): string {
+  return `${messages.installationFirstMissing}\n${installation.missing.slice(0, MISSING_FILES_SHOWN).join('\n')}`
+    + `${reportLine(messages, reportPath)}\n\n${messages.installationIncompleteAdvice}`
+}
+
+/**
+ * Upper bound on waiting for the crash report before the dialog opens. The report compares the installed files with
+ * the packaged list first, which takes a few seconds when security software scans every file it touches.
+ */
+export const CRASH_REPORT_WAIT_MS = 5_000
 
 /** The dialog's `detail` budget in characters, within which the native message box stays readable. */
 const DETAIL_BUDGET = 1200
@@ -68,17 +83,24 @@ export class DesktopFatalRecovery {
     const messages = this.operations.messages()
     const reportPath = await this.persist(error, source)
     let detail = desktopErrorState(error).message
-    let message = messages.fatalSummary
+    // Missing program files explain the failure better than whichever error they surfaced as.
+    const inspected = this.operations.installation?.()
+    let incomplete = inspected !== undefined && inspected.missing.length > 0 ? inspected : undefined
+    let message = incomplete === undefined ? messages.fatalSummary
+      : formatDesktopMessage(messages.installationIncomplete,
+        { missing: String(incomplete.missing.length), total: String(incomplete.total) })
     for (;;) {
-      const addressInUse = /\blisten EADDRINUSE\b/u.test(detail)
+      const addressInUse = incomplete === undefined && /\blisten EADDRINUSE\b/u.test(detail)
       const { response } = await this.operations.show({
         type: 'error',
         title: messages.startupFailed,
         message,
-        detail: addressInUse
-          ? `${messages.startupAddressInUse}${reportLine(messages, reportPath)}`
-          : dialogDetail(detail, messages, reportPath),
-        buttons: addressInUse
+        detail: incomplete !== undefined ? incompleteDetail(incomplete, messages, reportPath)
+          : addressInUse
+            ? `${messages.startupAddressInUse}${reportLine(messages, reportPath)}`
+            : dialogDetail(detail, messages, reportPath),
+        // Disabling plugins cannot restore program files.
+        buttons: addressInUse || incomplete !== undefined
           ? [messages.exitApplication, messages.restartApplication]
           : [messages.exitApplication, messages.restartApplication, messages.disableThirdPartyPlugins],
         defaultId: 1,
@@ -99,6 +121,7 @@ export class DesktopFatalRecovery {
         console.error(failure)
         message = messages.recoveryOperationFailed
         detail = desktopErrorState(failure).message
+        incomplete = undefined
       }
     }
   }
