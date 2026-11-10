@@ -63,7 +63,7 @@ import { DesktopTpcoworkHubPlugin } from './tpcoworkhub-plugin.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
-import { DesktopTray } from './tray.ts'
+import { DesktopTray, LINUX_TRAY_ICON_SIZE } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
 import { DesktopTaskNotifications, packagedAppId, parseDesktopTaskNotification } from './task-notifications.ts'
 
@@ -1058,14 +1058,20 @@ async function main(): Promise<void> {
   }
   refreshApplicationMenu()
   const trayIconPath = development ? join(app.getAppPath(), 'resources', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
-  if (process.platform === 'win32') {
+  // Windows and Linux close the window to the tray, like Windows; Linux trays read PNG rather than ICO, so they use the
+  // packaged product icon at tray size.
+  const usesTray = process.platform === 'win32' || process.platform === 'linux'
+  if (usesTray) {
     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
     try {
-      tray = new DesktopTray({ iconPath: trayIconPath, locale: currentDesktopLocale,
-        open: () => { focusPrimaryWindow() }, quit: () => { app.quit() } })
+      tray = new DesktopTray({
+        ...(process.platform === 'linux'
+          ? { iconPath: development ? join(app.getAppPath(), 'resources', 'icon.png') : join(process.resourcesPath, 'icon.png'), size: LINUX_TRAY_ICON_SIZE }
+          : { iconPath: trayIconPath }),
+        locale: currentDesktopLocale, open: () => { focusPrimaryWindow() }, quit: () => { app.quit() } })
     } catch (error) { console.warn('desktop tray: unavailable', error) }
   }
-  const backgroundNotice = process.platform === 'win32'
+  const backgroundNotice = usesTray
     ? new DesktopBackgroundNotice({ markerPath: join(app.getPath('userData'), 'background-close-confirmed'),
       locale: () => locale, show: showBackgroundNotice, focus: focusAboutWindow })
     : undefined

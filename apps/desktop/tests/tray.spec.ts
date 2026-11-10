@@ -15,7 +15,8 @@ const native = await vi.hoisted(async () => {
   const menus: MenuItemConstructorOptions[][] = []
   return {
     trays, FakeTray, menus,
-    createFromPath: vi.fn((path: string) => ({ path })),
+    createFromPath: vi.fn((path: string) => ({ path,
+      resize: (options: { width: number; height: number; quality: string }) => ({ path, ...options }) })),
     buildFromTemplate: vi.fn((template: MenuItemConstructorOptions[]) => { menus.push(template); return { template } }),
   }
 })
@@ -42,7 +43,8 @@ function labels(menu: MenuItemConstructorOptions[]): (string | undefined)[] {
 it('shows the application icon with its name as the tooltip and an Open / Quit menu', () => {
   const f = setup()
   expect(native.createFromPath).toHaveBeenCalledWith('C:/app/resources/tray.ico')
-  expect(f.native.image).toEqual({ path: 'C:/app/resources/tray.ico' })
+  expect(f.native.image).toMatchObject({ path: 'C:/app/resources/tray.ico' })
+  expect(f.native.image).not.toHaveProperty('width')
   expect(f.native.setToolTip).toHaveBeenCalledWith('DeepSeek Harness')
   expect(labels(native.menus[0]!)).toEqual(['Open DeepSeek Harness', 'separator', 'Quit DeepSeek Harness'])
   expect(f.native.setContextMenu).toHaveBeenCalledWith({ template: native.menus[0] })
@@ -69,4 +71,10 @@ it('relabels the menu in the current locale and ignores relabel after disposal',
   expect(f.native.destroy).toHaveBeenCalledOnce()
   f.tray.relabel()
   expect(native.menus).toHaveLength(2)
+})
+
+it('scales a Linux PNG icon to the requested tray size', () => {
+  const tray = new DesktopTray({ iconPath: '/opt/app/resources/icon.png', size: 64, locale: () => resolveDesktopLocale('en'), open: vi.fn(), quit: vi.fn() })
+  expect(native.trays[0]!.image).toEqual({ path: '/opt/app/resources/icon.png', width: 64, height: 64, quality: 'best' })
+  tray.dispose()
 })
