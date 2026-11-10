@@ -20,6 +20,10 @@
         transition: opacity 0.16s ease;
         -webkit-app-region: drag;
       }
+      /* Windows and Linux draw their own caption bar; the cover starts below it so the header menu stays visible. */
+      html[data-windows-titlebar] #dsh-startup {
+        top: var(--dsh-windows-titlebar-height, 0px);
+      }
       body.dsh-startup-ready #dsh-startup {
         pointer-events: none;
         opacity: 0;

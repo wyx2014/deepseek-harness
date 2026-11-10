@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { documentShown, revealWhenReady } from '../src/startup-splash.ts'
 
 beforeEach(() => {
@@ -83,4 +85,10 @@ describe('startup cover', () => {
     document.body.innerHTML = '<div id="root"></div>'
     expect(() => { revealWhenReady(Promise.resolve(), shown) }).not.toThrow()
   })
+})
+
+it('starts the cover below the Windows and Linux caption bar so the header menu stays visible', () => {
+  // jsdom computes no layout; Chrome places this cover at the caption height (40px) and fills the window without it.
+  const html = readFileSync(join(__dirname, '../index.html'), 'utf8')
+  expect(html).toMatch(/html\[data-windows-titlebar\] #dsh-startup \{\s*top: var\(--dsh-windows-titlebar-height, 0px\);\s*\}/u)
 })
