@@ -9,7 +9,6 @@
 import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { inspect } from 'node:util'
-import type { InstallationInspection } from './installation-files.ts'
 
 /** Where a fatal failure surfaced. */
 export type CrashReportSource = 'host' | 'web-boot' | 'renderer' | 'main'
@@ -37,8 +36,6 @@ export interface CrashReportInput {
   readonly hostDiagnostic?: string
   /** Recent renderer console lines at error level, oldest first. */
   readonly rendererConsole: readonly string[]
-  /** Comparison of the installed files with the packaged list, when the package recorded one. */
-  readonly installation?: InstallationInspection
   readonly app: CrashReportApp
   readonly time: Date
 }
@@ -129,26 +126,7 @@ export function renderCrashReport(input: CrashReportInput): string {
     '--- renderer console (error level, oldest first) ---',
     consoleSection,
     '',
-    ...(input.installation === undefined ? [] : installationSection(input.installation)),
   ].join('\n')
-}
-
-/** Paths listed per group; a wholly absent directory would otherwise fill the report. */
-const INSTALLATION_PATHS_LISTED = 200
-
-function installationSection(installation: InstallationInspection): string[] {
-  const group = (label: string, paths: readonly string[]): string[] => paths.length === 0 ? [] : [
-    `${label} (${String(paths.length)}):`,
-    ...paths.slice(0, INSTALLATION_PATHS_LISTED).map(path => `  ${path}`),
-    ...(paths.length > INSTALLATION_PATHS_LISTED ? [`  … and ${String(paths.length - INSTALLATION_PATHS_LISTED)} more`] : []),
-  ]
-  return [
-    '--- installation files ---',
-    `${String(installation.total)} files shipped, ${String(installation.missing.length)} missing, ${String(installation.changed.length)} with a different size`,
-    ...group('missing', installation.missing),
-    ...group('different size', installation.changed),
-    '',
-  ]
 }
 
 function boundedErrorSection(error: unknown): string {

@@ -32,9 +32,6 @@ vi.mock('../src/crash-report.ts', async importOriginal => ({
   pruneCrashReports: vi.fn(async () => {}),
 }))
 
-// Like the report write above, the installed-files comparison is file I/O these tests do not wait for.
-vi.mock('../src/installation-files.ts', () => ({ inspectInstallation: vi.fn(async () => undefined) }))
-
 const harness = await vi.hoisted(async () => {
   const { EventEmitter } = await import('node:events')
   function deferred() {
@@ -2034,9 +2031,7 @@ describe('desktop main startup', () => {
     await harness.dialogShown.promise
     expect(harness.dialog.showMessageBox.mock.calls.some(call =>
       (call.at(-1) as MessageBoxOptions).detail?.includes('replacement startup failed'))).toBe(true)
-    // Refused either with the startup failure itself or, once that recovery has settled (as it has by the time real
-    // report I/O finishes), because no Host is running; neither authorizes installation.
-    await expect(harness.prepareUpdate()).rejects.toThrow(/replacement startup failed|Task status is unavailable/u)
+    await expect(harness.prepareUpdate()).rejects.toThrow('replacement startup failed')
     expect(harness.hosts).toHaveLength(2)
   })
 

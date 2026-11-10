@@ -23,7 +23,6 @@ import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mj
 import { desktopArtifactOutput, desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
 import { preserveWindowsRuntimeSignature, signWindowsCode } from './windows-runtime-signature.mjs'
 import { prepareWindowsAsarUnpack, verifyWindowsAsarUnpack } from './windows-asar-unpack.mjs'
-import { writeInstallationFiles } from './installation-files.mjs'
 import { recordPackagingEvent } from './packaging-run.mjs'
 import {
   resolveMacOSAppUpdateFeed,
@@ -234,9 +233,6 @@ export function createElectronBuilderConfig(
         preparedRuntimeVersion ?? productVersion, { platform: resolvedPlatform, arch: resolvedArch })
       // Unsigned Windows builds skip electron-builder's afterSign hook.
       if (packagesWindows && unsigned) await verifyWindowsAsarUnpack(buildPaths.dsh, resourcesDir, windowsCode)
-      // The list a damaged installation is compared with. Signed Windows builds write it after signing changes the
-      // files; a macOS bundle is sealed by its signature and gets none.
-      if (resolvedPlatform !== 'darwin' && windowsSigner === undefined) await writeInstallationFiles(resourcesDir)
     },
     afterSign: async context => {
       if (windowsSigner !== undefined) {
@@ -246,7 +242,6 @@ export function createElectronBuilderConfig(
           record: event => recordPackagingEvent(env.DSH_DESKTOP_PACKAGING_RUN_DIR, event),
         })
         await verifyWindowsAsarUnpack(buildPaths.dsh, context.packager.getResourcesDir(context.appOutDir), windowsCode)
-        await writeInstallationFiles(context.packager.getResourcesDir(context.appOutDir))
       }
       if (context.electronPlatformName !== 'darwin' || unsigned) return
       const appPath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
