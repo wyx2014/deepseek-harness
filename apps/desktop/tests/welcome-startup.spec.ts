@@ -303,3 +303,43 @@ it.each([false, true])('starts welcome onboarding without carrying update focus 
   expect(state.focusWorkspace).toHaveBeenCalledOnce()
 
 })
+
+it('opens application-owned login without native key setup on startup, sign-out or expiry', async () => {
+  vi.resetModules()
+  vi.clearAllMocks()
+  vi.useFakeTimers()
+  state.preference = 'zh'
+  state.hasApiKey = false
+  state.operations = undefined
+  state.startHost.mockResolvedValueOnce({ url: 'http://127.0.0.1:3080/?token=test', injections: [
+    { kind: 'global', name: '__DSH_DESKTOP_LOGIN_ENTRY__', value: 'application' },
+  ] })
+  vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
+  vi.stubEnv('DSH_DESKTOP_DEV_PROJECT_DIR', '/development-profile')
+  vi.stubEnv('DSH_DESKTOP_NODE_BINARY', '/runtime/node')
+  vi.stubEnv('DSH_DESKTOP_PNPM_ENTRY', '/runtime/pnpm')
+  vi.stubEnv('DSH_DESKTOP_DSH_DIR', '/runtime/dsh')
+  vi.stubEnv('DSH_DESKTOP_PRIMARY_RUNTIME_DIR', '/runtime/primary-runtime')
+  vi.stubEnv('DSH_DESKTOP_HOST_INSPECT_PORT', undefined)
+  vi.stubEnv('DSH_DESKTOP_OPEN_DEVTOOLS', '0')
+  vi.stubEnv('DSH_DESKTOP_MANDATORY_UPDATE_CONFIG', undefined)
+  vi.stubEnv('DSH_DESKTOP_UPDATE_JOURNAL_DIR', undefined)
+
+  await import('../src/main.ts')
+  await vi.waitFor(() => { expect(state.showWorkspace).toHaveBeenCalledOnce() })
+  expect(state.loadWorkspace).toHaveBeenCalledExactlyOnceWith('dsh-app://app/')
+  expect(state.beforeWelcome).not.toHaveBeenCalled()
+  expect(state.operations).toBeUndefined()
+
+  const links = { usageUrl: '', topUpUrl: '' }
+  state.accountListener!({ status: 'credential-stored', attempt: null, links })
+  state.accountListener!({ status: 'signed-out', attempt: null, links })
+  state.expiryListener!()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.beforeWelcome).not.toHaveBeenCalled()
+  expect(state.operations).toBeUndefined()
+
+  state.appListeners.get('open-url')!({ preventDefault: vi.fn() }, 'dsh://open')
+  expect(state.showWorkspace).toHaveBeenCalledTimes(2)
+  expect(state.beforeWelcome).not.toHaveBeenCalled()
+})

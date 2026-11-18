@@ -227,6 +227,8 @@ Dependency installation does not download the locked Electron binary. Before lau
 
 ### Startup onboarding
 
+A product can publish the Host index-injection global `__DSH_DESKTOP_LOGIN_ENTRY__` as `application` to handle login inside the main UI. Desktop then skips the native welcome and API-key pages at startup, sign-out and expiry; the product remains responsible for its login barrier and model configuration. Missing metadata or `native` retains the flow below; unsupported values stop startup with an error.
+
 The API-key input starts empty and uses `autocomplete="new-password"` to ask Chromium not to autofill saved login passwords.
 
 Repeated launches and `dsh://open` keep the workspace hidden until the startup credential check or a welcome action permits entry. Entering from Welcome places keyboard focus on the document without selecting a sidebar control; Tab navigation remains available.

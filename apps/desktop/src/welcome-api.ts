@@ -68,8 +68,20 @@ export interface WelcomeAuthentication {
 /**
  * Decide whether a startup or sign-out requires the welcome entry.
  * @param authentication - current account and independently stored API-key facts.
- * @returns true only when neither authentication route is configured.
+ * @param injections - Host boot rows; absent rows retain native login. A product may publish the global
+ * `__DSH_DESKTOP_LOGIN_ENTRY__` as `application` to own login, or `native` to retain the native entry.
+ * @returns false for application-owned login; otherwise true when neither native authentication route is configured.
+ * @throws when a product declares an unsupported login entry, preventing a silent fallback to native key setup.
  */
-export function needsWelcome(authentication: WelcomeAuthentication): boolean {
+export function needsWelcome(authentication: WelcomeAuthentication, injections: readonly unknown[] = []): boolean {
+  for (const row of injections) {
+    if (typeof row !== 'object' || row === null || !('kind' in row) || row.kind !== 'global'
+      || !('name' in row) || row.name !== '__DSH_DESKTOP_LOGIN_ENTRY__') continue
+    if (!('value' in row) || (row.value !== 'application' && row.value !== 'native')) {
+      throw new Error('desktop welcome: invalid product login entry')
+    }
+    // 产品账号下发模型配置时，由应用内登录屏障负责认证，不再显示原生 API Key 引导。
+    if (row.value === 'application') return false
+  }
   return !authentication.loggedIn && !authentication.hasApiKey
 }

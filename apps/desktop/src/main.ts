@@ -515,7 +515,7 @@ async function main(): Promise<void> {
           if (state.status === 'credential-stored' && attempt?.phase === 'succeeded' && welcomeWindow !== undefined) void enterWorkspace({ activate: false }).catch(() => undefined)
           if (previousAccountStatus === 'credential-stored' && state.status === 'signed-out') {
             void readWelcomeState().then(async (value) => {
-              if (needsWelcome(value) && !quitting) {
+              if (needsWelcome(value, injections) && !quitting) {
                 enteredWorkspace = false
                 await showWelcome()
                 if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
@@ -528,7 +528,7 @@ async function main(): Promise<void> {
           // The stream reconnects; a transport failure does not change account state.
         }, () => {
           void readWelcomeState().then(async (value) => {
-            if (!needsWelcome(value) || quitting) return
+            if (!needsWelcome(value, injections) || quitting) return
             pendingWelcomeNotice = 'session-expired'
             enteredWorkspace = false
             await showWelcome()
@@ -1283,7 +1283,7 @@ async function main(): Promise<void> {
     locale = resolveDesktopStartupLocale(state.localePreference, systemLanguages)
     windowsLanguage = locale.id
     refreshApplicationMenu()
-    if (!enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey })) {
+    if (!enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey }, injections)) {
       // A later login must retain its own activation policy instead of replaying startup focus.
       raiseAfterUpdate = false
       await showWelcome()

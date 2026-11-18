@@ -186,6 +186,18 @@ describe('desktop welcome window', () => {
     expect(needsWelcome({ loggedIn: false, hasApiKey: true })).toBe(false)
     expect(needsWelcome({ loggedIn: true, hasApiKey: true })).toBe(false)
   })
+
+  it('delegates login to a product application without requiring a native API key', () => {
+    const authentication = { loggedIn: false, hasApiKey: false }
+    const entry = (value: unknown) => [{ kind: 'global', name: '__DSH_DESKTOP_LOGIN_ENTRY__', value }]
+    expect(needsWelcome(authentication, entry('application'))).toBe(false)
+    expect(needsWelcome(authentication, entry('native'))).toBe(true)
+    expect(needsWelcome(authentication, [null, { kind: 'style', text: '' },
+      { kind: 'global', name: 'other', value: 'application' }])).toBe(true)
+    expect(() => needsWelcome(authentication, entry('unsupported'))).toThrow('invalid product login entry')
+    expect(() => needsWelcome(authentication, [{ kind: 'global', name: '__DSH_DESKTOP_LOGIN_ENTRY__' }]))
+      .toThrow('invalid product login entry')
+  })
 })
 
 it('accepts only permitted event fields and reads the current policy over IPC', async () => {
