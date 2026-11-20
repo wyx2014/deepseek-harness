@@ -324,6 +324,8 @@ type PreStepDecision =
     messages: UserMessage[]
     /** Start a distinct model-message series before this step's admitted messages. */
     startsRequestSeries?: true
+    /** Complete the first step's turn locally and continue draining pending input without a model request for this turn. */
+    handledLocally?: true
   }
 ```
 

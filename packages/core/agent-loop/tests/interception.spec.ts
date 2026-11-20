@@ -193,6 +193,36 @@ describe('agent/pre-step', () => {
     expect(JSON.stringify(adapter.requests[0]!.messages)).not.toContain('original')
   })
 
+  it('closes a locally handled turn and continues with a queued prompt', async () => {
+    const adapter = new MockAdapter([textResponse('normal reply')])
+    const ctx = await harness(adapter)
+    const agent = await ctx.agentLoop.create(SessionId('local-turn'), { provider: 'mock', model: 'mock' })
+    const entered = Promise.withResolvers<undefined>()
+    const handled = Promise.withResolvers<undefined>()
+    ctx.on('agent/pre-step', async ({ turn }, next) => {
+      const decision = await next()
+      if (turn !== 1 || decision.kind !== 'enter') return decision
+      entered.resolve(undefined)
+      await handled.promise
+      return { ...decision, handledLocally: true }
+    })
+    try {
+      send(agent, 'local command')
+      await entered.promise
+      send(agent, 'queued prompt')
+      handled.resolve(undefined)
+      await agent.whenIdle()
+
+      expect(adapter.requests).toHaveLength(1)
+      expect(JSON.stringify(adapter.requests[0]?.messages)).toContain('queued prompt')
+      expect(JSON.stringify(adapter.requests[0]?.messages)).not.toContain('local command')
+      expect(events(agent).filter(event => event.type === 'turn/end').map(event => event.data.reason.kind))
+        .toEqual(['completed', 'completed'])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('enter with additional messages records separately sourced context in the turn', async () => {
     const adapter = new MockAdapter([textResponse('ok')])
     const ctx = await harness(adapter)

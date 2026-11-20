@@ -204,6 +204,7 @@ export function resolveDesktopPackageTarget(
 interface DesktopPackageInvocation {
   readonly target: DesktopPackageTarget
   readonly directory: boolean
+  readonly debOnly: boolean
   readonly prepareOnly: boolean
   readonly unsigned: boolean
   readonly standalone: boolean
@@ -239,6 +240,7 @@ export function parseDesktopPackageInvocation(
     allowPositionals: true,
     options: {
       dir: { type: 'boolean', default: false },
+      'deb-only': { type: 'boolean', default: false },
       'prepare-only': { type: 'boolean', default: false },
       unsigned: { type: 'boolean', default: false },
       standalone: { type: 'boolean', default: false },
@@ -250,6 +252,9 @@ export function parseDesktopPackageInvocation(
   })
   if (positionals.length > 1) throw new Error('desktop package: expected at most one target')
   const name = positionals[0] ?? hostTargetName(hostPlatform, hostArch)
+  if (values['deb-only'] && (name !== 'linux-x64' || values.dir)) {
+    throw new Error('desktop package: --deb-only requires a Linux x64 installer build')
+  }
   if (values.unsigned && values['prepare-only']) throw new Error('desktop package: --unsigned cannot use --prepare-only')
   if (values.product !== undefined && (!['win-x64', 'linux-x64'].includes(name) || !values.unsigned || !values.product.trim())) {
     throw new Error('desktop package: --product requires win-x64 or linux-x64 --unsigned and a configuration filename')
@@ -270,6 +275,7 @@ export function parseDesktopPackageInvocation(
   return {
     target: resolveDesktopPackageTarget(name, hostPlatform, hostArch),
     directory: values.dir,
+    debOnly: values['deb-only'],
     prepareOnly: values['prepare-only'],
     unsigned: values.unsigned,
     standalone: values.standalone,
@@ -285,12 +291,14 @@ export function parseDesktopPackageInvocation(
  * @param target - Supported release target.
  * @param directory - Whether to stop at an unpacked application directory.
  * @param artifact - Optional single artifact built from an existing signed application.
+ * @param debOnly - Whether the Linux installer build should emit just the Debian package.
  * @returns Arguments that keep publishing under the separate validated upload command.
  */
 export function desktopElectronBuilderArguments(
   target: DesktopPackageTarget,
   directory: boolean,
   artifact?: DesktopPrepackagedArtifact,
+  debOnly = false,
 ): readonly string[] {
   return [
     'exec',
@@ -298,7 +306,7 @@ export function desktopElectronBuilderArguments(
     '--config',
     'electron-builder.config.mjs',
     target.builderPlatform,
-    ...(target.platform === 'linux' && !directory ? ['AppImage', 'deb'] : []),
+    ...(target.platform === 'linux' && !directory ? (debOnly ? ['deb'] : ['AppImage', 'deb']) : []),
     ...(artifact === undefined ? [] : [artifact.format]),
     target.builderArch,
     '--publish',
@@ -564,7 +572,7 @@ export async function packageTarget(
     await withMacOSNotarizationProxy(mac?.notarizationProxy,
       () => notarizeMacOS({ appPath, ...resolveMacOSNotarizationEnvironment(environment) }), undefined, undefined, proxyEvent)
   } else {
-    await signedStage('artifacts', () => execute(desktopElectronBuilderArguments(target, invocation.directory), electronBuilderEnv))
+    await signedStage('artifacts', () => execute(desktopElectronBuilderArguments(target, invocation.directory, undefined, invocation.debOnly), electronBuilderEnv))
     await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts',
       ...(invocation.unsigned ? ['--unsigned'] : []), ...(invocation.skipNotarization ? ['--skip-notarization'] : [])], targetEnv)
   }

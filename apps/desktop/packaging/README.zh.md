@@ -93,7 +93,7 @@ pnpm run package:desktop:mac:x64
 pnpm run package:desktop:win:x64
 ```
 
-macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 仅用于独立未签名产品测试，不支持签名 Desktop 发布。
+macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 仅用于独立未签名产品测试，不支持签名 Desktop 发布。 Linux 产品打包命令可传入 `--deb-only`，只生成一个 DEB 安装包。
 
 Linux 产品品牌资源可提供 `resources/linux-icons/<size>x<size>.png` 各尺寸图像，作为 hicolor 菜单图标；未设置品牌资源时使用 `icon-macos.png`。`DSH_DESKTOP_DISPLAY_NAME` 控制菜单名称和包简介，`DSH_DESKTOP_PRODUCT_NAME` 保留数据目录名和窗口类名。DEB 安装时为 `/home` 下已有用户提供桌面快捷方式，以对应用户身份操作文件；用户删除的快捷方式在升级时不会恢复，卸载时移除安装器创建的快捷方式。AppImage 不安装这些快捷方式。
 

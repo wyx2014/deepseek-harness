@@ -95,6 +95,13 @@ describe('desktop package target', () => {
     ])
     expect(desktopElectronBuilderArguments(invocation.target, true)).toContain('--dir')
     expect(desktopElectronBuilderArguments(invocation.target, true)).not.toContain('AppImage')
+    const deb = parseDesktopPackageInvocation([...args, '--deb-only'], 'linux', 'x64')
+    expect(deb.debOnly).toBe(true)
+    expect(desktopElectronBuilderArguments(deb.target, deb.directory, undefined, deb.debOnly)).toEqual([
+      'exec', 'electron-builder', '--config', 'electron-builder.config.mjs', '--linux', 'deb', '--x64', '--publish', 'never',
+    ])
+    expect(() => parseDesktopPackageInvocation([...args, '--deb-only', '--dir'], 'linux', 'x64')).toThrow(/Linux x64 installer/u)
+    expect(() => parseDesktopPackageInvocation(['win-x64', '--deb-only'], 'win32', 'x64')).toThrow(/Linux x64 installer/u)
     expect(() => parseDesktopPackageInvocation(['linux-x64', '--unsigned'], 'linux', 'x64')).toThrow(/--standalone --product/u)
     expect(() => parseDesktopPackageInvocation(args.filter(arg => arg !== '--unsigned'), 'linux', 'x64')).toThrow(/--unsigned/u)
     expect(() => parseDesktopPackageInvocation([...args, '--skip-notarization'], 'linux', 'x64')).toThrow(/signed macOS/u)

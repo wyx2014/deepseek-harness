@@ -53,12 +53,7 @@ type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }
 
 type PreparedStep =
   | { kind: 'reject' }
-  | {
-    kind: 'enter'
-    messages: UserMessage[]
-    startsRequestSeries?: true
-    assembly: PromptAssembly
-  }
+  | (Extract<PreStepDecision, { kind: 'enter' }> & { assembly: PromptAssembly })
 
 /** Remove adapter-derived values before plugins propose the next request config. */
 function requestProposal(header: EpochHeader): LlmCallConfig {
@@ -319,6 +314,10 @@ export class ReactLoopAgent implements Agent {
         if (decision.kind === 'reject') {
           turnEnds = { kind: 'blocked' }
           return false
+        }
+        if (phase.step === 0 && decision.handledLocally) {
+          turnEnds = { kind: 'completed' }
+          break
         }
         if (turnEnds && decision.messages.length === 0) break
         // A removed waking message or an enter decision rewritten to empty
