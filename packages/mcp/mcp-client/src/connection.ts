@@ -297,7 +297,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       { name: 'dsh-mcp-client', version: '0.0.1' },
       {
         capabilities: {},
-        versionNegotiation: { mode: 'auto' },
+        versionNegotiation: { mode: (config.transport === 'streamable-http' ? config.versionNegotiation : undefined) ?? 'auto' },
         listChanged: {
           tools: {
             autoRefresh: false,

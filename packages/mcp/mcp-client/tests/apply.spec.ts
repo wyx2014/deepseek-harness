@@ -14,7 +14,9 @@ import type { Config } from '@deepseek-ai/dsh-mcp-client'
 
 // vi.mock factories are hoisted above every import/const, so the mock fns and
 // class must be created inside vi.hoisted to exist when the factories run.
-const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, MockClient } = vi.hoisted(() => {
+const {
+  mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, mockVersionNegotiation, MockClient,
+} = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>()
   const mockClose = vi.fn<() => Promise<void>>()
   const mockListTools = vi.fn<(_params?: Record<string, unknown>) => Promise<unknown>>()
@@ -22,19 +24,24 @@ const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotification
     _params?: Record<string, unknown>, _options?: unknown,
   ) => Promise<unknown>>()
   const mockSetNotificationHandler = vi.fn()
+  const mockVersionNegotiation = vi.fn()
   class MockClient {
     transport = {}
     connect = mockConnect
     close = mockClose
     listTools = mockListTools
     callTool = mockCallTool
-    constructor(_info: unknown, options: { listChanged: { tools: { onChanged: () => void } } }) {
+    constructor(_info: unknown, options: {
+      listChanged: { tools: { onChanged: () => void } }
+      versionNegotiation: { mode: string }
+    }) {
+      mockVersionNegotiation(options.versionNegotiation.mode)
       mockSetNotificationHandler('notifications/tools/list_changed', options.listChanged.tools.onChanged)
     }
     getServerCapabilities = () => ({ tools: {} })
     getInstructions(): string | undefined { return undefined }
   }
-  return { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, MockClient }
+  return { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, mockVersionNegotiation, MockClient }
 })
 
 vi.mock('@modelcontextprotocol/client', () => ({
@@ -189,6 +196,22 @@ describe('apply (plugin lifecycle)', () => {
     expect(mockSetNotificationHandler).toHaveBeenCalled()
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
     expect(ctx.tools.get('remote')).toBeUndefined()
+  })
+
+  it.each([undefined, 'legacy'] as const)('uses the configured HTTP negotiation mode (%s)', async (versionNegotiation) => {
+    const config = ConfigSchema({
+      transport: 'streamable-http',
+      serverName: 'srv',
+      url: 'https://example.test/mcp',
+      ...(versionNegotiation === undefined ? {} : { versionNegotiation }),
+    })
+    try {
+      await apply(ctx, config)
+      expect(mockVersionNegotiation).toHaveBeenCalledWith(versionNegotiation ?? 'auto')
+      expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 
   it('keeps the Cordis plugin loading until initial discovery publishes its tools', async () => {
