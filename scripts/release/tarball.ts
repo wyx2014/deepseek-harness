@@ -7,8 +7,8 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
-import { capture } from './process.ts'
+import { join } from 'node:path'
+import { list } from 'tar'
 
 /** Name of the file recording the order in which a packed family uploads. */
 export const PUBLISH_ORDER_FILE = 'publish-order.txt'
@@ -27,8 +27,9 @@ export interface PackedIdentity {
  * @returns Every path inside the archive.
  */
 export function tarballFiles(tarball: string): string[] {
-  // GNU tar reads the colon in a Windows drive path as a remote-host separator, so tar runs beside the tarball.
-  return capture('tar', ['-tzf', basename(tarball)], { cwd: dirname(tarball) }).split(/\r?\n/u).filter(line => line !== '')
+  const files: string[] = []
+  list({ file: tarball, sync: true, strict: true, onReadEntry: (entry) => { files.push(entry.path) } })
+  return files
 }
 
 /**
@@ -37,7 +38,17 @@ export function tarballFiles(tarball: string): string[] {
  * @returns The packed package.json object.
  */
 export function packedManifest(tarball: string): Record<string, unknown> {
-  const manifest: unknown = JSON.parse(capture('tar', ['-xOzf', basename(tarball), 'package/package.json'], { cwd: dirname(tarball) }))
+  // npm tarballs carry UTF-8 paths. Windows bsdtar can reject unrelated entries outside the system code page.
+  const chunks: Buffer[] = []
+  list({
+    file: tarball,
+    sync: true,
+    strict: true,
+    filter: path => path === 'package/package.json',
+    onReadEntry: (entry) => { entry.on('data', (chunk) => { chunks.push(chunk) }) },
+  })
+  if (chunks.length === 0) throw new Error(`${tarball} has no manifest`)
+  const manifest: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'))
   if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) throw new Error(`${tarball} has no manifest`)
   return manifest as Record<string, unknown>
 }

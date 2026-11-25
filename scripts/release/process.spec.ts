@@ -1,7 +1,7 @@
-import { execFileSync } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { join } from 'node:path'
+import { create as createTar } from 'tar'
 import { afterEach, describe, expect, it } from 'vitest'
 import { capture, pnpmCommand } from './process.ts'
 import { packedIdentity, tarballFiles } from './tarball.ts'
@@ -20,11 +20,12 @@ async function packedTarball(name: string, version: string): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-tarball-'))
   directories.push(directory)
   const contents = join(directory, 'package')
-  await import('node:fs/promises').then(async fs => fs.mkdir(contents))
+  await mkdir(contents)
   await writeFile(join(contents, 'package.json'), JSON.stringify({ name, version }))
   await writeFile(join(contents, 'index.js'), '')
+  await writeFile(join(contents, '工作_招手打招呼.webm'), 'fixture')
   const archive = join(directory, `${name.replaceAll('/', '-').replace('@', '')}-${version}.tgz`)
-  execFileSync('tar', ['-czf', basename(archive), 'package'], { cwd: dirname(archive) })
+  await createTar({ file: archive, cwd: directory, gzip: true }, ['package'])
   return archive
 }
 
@@ -38,13 +39,14 @@ describe('release process helpers', () => {
 })
 
 describe('release tarball readers', () => {
-  it('lists members of an archive under an absolute path', async () => {
-    // GNU tar reads the colon in a Windows drive path as a remote host, so the readers run beside the archive.
+  it('lists UTF-8 members of an archive under an absolute path', async () => {
     const archive = await packedTarball('@deepseek-ai/dsh-probe', '1.2.3')
-    expect(tarballFiles(archive)).toEqual(expect.arrayContaining(['package/package.json', 'package/index.js']))
+    expect(tarballFiles(archive)).toEqual(expect.arrayContaining([
+      'package/package.json', 'package/index.js', 'package/工作_招手打招呼.webm',
+    ]))
   })
 
-  it('reads what an archive declares about itself', async () => {
+  it('reads the package manifest alongside UTF-8 member names', async () => {
     const archive = await packedTarball('@deepseek-ai/dsh-probe', '1.2.3')
     expect(packedIdentity(archive)).toEqual({ name: '@deepseek-ai/dsh-probe', version: '1.2.3' })
   })
